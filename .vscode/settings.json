@@ -1,0 +1,29 @@
+{
+    // Microsoft C++ extension - IntelliSense and formatting
+    "C_Cpp.intelliSenseEngine": "default",
+    "C_Cpp.errorSquiggles": "enabled",
+    "C_Cpp.autocomplete": "enabled",
+    "C_Cpp.suggestSnippets": true,
+    "C_Cpp.enhancedColorization": "enabled",
+    "C_Cpp.autoAddFileAssociations": true,
+    "C_Cpp.default.browse.limitSymbolsToIncludedHeaders": true,
+
+    // Use bundled clang-format with .clang-format file for style
+    "C_Cpp.clang_format_style": "file",
+    "C_Cpp.clang_format_fallbackStyle": "Google",
+
+    // Format on save
+    "editor.formatOnSave": true,
+    "editor.formatOnSaveMode": "file",
+    "editor.defaultFormatter": "ms-vscode.cpptools",
+
+    // C/C++ specific format on save
+    "[cpp]": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "ms-vscode.cpptools"
+    },
+    "[c]": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "ms-vscode.cpptools"
+    }
+}
