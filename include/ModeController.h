@@ -24,16 +24,17 @@
 #pragma once
 
 #include "RandomMode.h"
-#include "SequenceMode.h"
+#include "StepMode.h"
 #include "config.h"
 
-// Owns the active operating mode. Pushes settings into each mode and delegates
-// the per-loop tick to whichever mode is selected.
+// Owns the active operating mode. Table-based modes run on the shared StepMode
+// engine; Random runs on its own. Pushes settings into the active mode and
+// delegates the per-loop tick.
 class ModeController {
   public:
-    ModeController(SequenceMode& sequence, RandomMode& random);
+    ModeController(StepMode& step, RandomMode& random);
 
-    // Apply settings: update each mode's parameters, and (re)start the selected
+    // Apply settings: refresh each mode's parameters, and (re)start the selected
     // mode when the mode changes. Parameter-only changes take effect on the next
     // step without restarting the active mode.
     void apply(const AppSettings& settings);
@@ -45,7 +46,10 @@ class ModeController {
     const AppSettings& settings() const { return settings_; }
 
   private:
-    SequenceMode& sequence_;
+    // Build the step table for the current mode and load it into the engine.
+    void loadStepTable();
+
+    StepMode& step_;
     RandomMode& random_;
     AppSettings settings_;
     bool started_ = false;

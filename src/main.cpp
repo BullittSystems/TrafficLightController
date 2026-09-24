@@ -30,17 +30,17 @@
 #include "LampController.h"
 #include "ModeController.h"
 #include "RandomMode.h"
-#include "SequenceMode.h"
 #include "Settings.h"
+#include "StepMode.h"
 #include "WebInterface.h"
 #include "WifiProvisioner.h"
 #include "config.h"
 #include "version.h"
 
 static LampController lamps;
-static SequenceMode sequenceMode(lamps);
+static StepMode stepMode(lamps);
 static RandomMode randomMode(lamps);
-static ModeController controller(sequenceMode, randomMode);
+static ModeController controller(stepMode, randomMode);
 static Settings settings;
 static WifiProvisioner wifi;
 static WebInterface web(settings, controller);

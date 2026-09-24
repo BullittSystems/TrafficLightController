@@ -23,22 +23,21 @@
  */
 #include "ModeController.h"
 
-ModeController::ModeController(SequenceMode& sequence, RandomMode& random)
-    : sequence_(sequence), random_(random) {}
+ModeController::ModeController(StepMode& step, RandomMode& random) : step_(step), random_(random) {}
 
 void ModeController::apply(const AppSettings& settings) {
     const bool modeChanged = !started_ || settings.mode != settings_.mode;
     settings_              = settings;
 
-    sequence_.setDurations(settings_.sequence);
     random_.setBounds(settings_.random);
+    loadStepTable();  // refreshes parameters; no restart on its own
 
     // Restart only on an actual mode change (or first apply); parameter-only edits
     // take effect on the active mode's next step without a jarring restart.
     if (modeChanged) {
         switch (settings_.mode) {
             case Mode::Sequence:
-                sequence_.begin();
+                step_.begin();
                 break;
             case Mode::Random:
                 random_.begin();
@@ -51,10 +50,20 @@ void ModeController::apply(const AppSettings& settings) {
 void ModeController::tick() {
     switch (settings_.mode) {
         case Mode::Sequence:
-            sequence_.tick();
+            step_.tick();
             break;
         case Mode::Random:
             random_.tick();
             break;
     }
+}
+
+void ModeController::loadStepTable() {
+    const PhaseDurations& d = settings_.sequence;
+    const Step steps[]      = {
+        {lampBit(Lamp::Green), d.greenMs},
+        {lampBit(Lamp::Yellow), d.yellowMs},
+        {lampBit(Lamp::Red), d.redMs},
+    };
+    step_.setSteps(steps, 3);
 }
