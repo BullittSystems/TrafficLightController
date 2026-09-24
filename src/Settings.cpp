@@ -68,7 +68,8 @@ AppSettings Settings::load() {
     s.blink.intervalMs = prefs.getULong(KEY_BLINK_MS, s.blink.intervalMs);
     prefs.end();
 
-    // Guard against a corrupt/out-of-range persisted mode value.
+    // Guard against a corrupt/out-of-range persisted mode value (Off is the last
+    // enumerator, so it bounds the valid range).
     if (static_cast<uint8_t>(s.mode) > static_cast<uint8_t>(Mode::Off)) {
         s.mode = Mode::Sequence;
     }

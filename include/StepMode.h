@@ -48,15 +48,23 @@ class StepMode {
   public:
     explicit StepMode(LampController& lamps);
 
-    // Replace the step table (copied, up to MAX_STEPS). Takes effect on the next
-    // advance without restarting, unless the current index is now out of range.
+    // Replace the step table (copied, up to MAX_STEPS). Does not touch the lamps or
+    // timing; follow with begin() to restart or refresh() to re-apply in place.
     void setSteps(const Step* steps, uint8_t count);
 
-    // Restart at step 0 and apply it. Call after a mode change.
+    // Restart at step 0 and apply it (resets timing). Call after a mode change.
     void begin();
+
+    // Re-apply the current step without resetting timing. Use after a live table
+    // edit so parameter changes (e.g. a new color) take effect immediately even on
+    // a hold-forever step, without restarting the cadence.
+    void refresh();
 
     // Advance to the next step if the current one has elapsed. Call every loop().
     void tick();
+
+    // Lamp mask currently lit (bits per Lamp); 0 when empty.
+    uint8_t currentMask() const { return count_ > 0 ? steps_[index_].lampMask : 0; }
 
   private:
     void applyStep(uint8_t index);

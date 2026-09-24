@@ -57,18 +57,18 @@ void StepMode::setSteps(const Step* steps, uint8_t count) {
     if (index_ >= count_) {
         index_ = 0;
     }
-    // Re-apply the current step so a live table change (e.g. editing the color of
-    // a hold-forever step) takes effect immediately. Timing is left untouched, so
-    // Sequence/Blink keep their cadence rather than restarting.
-    if (count_ > 0) {
-        applyStep(index_);
-    }
 }
 
 void StepMode::begin() {
     index_       = 0;
     stepStartMs_ = millis();
     applyStep(index_);
+}
+
+void StepMode::refresh() {
+    if (count_ > 0) {
+        applyStep(index_);
+    }
 }
 
 void StepMode::tick() {

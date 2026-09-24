@@ -23,6 +23,9 @@
  */
 #pragma once
 
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
+
 #include "RandomMode.h"
 #include "StepMode.h"
 #include "config.h"
@@ -39,11 +42,24 @@ class ModeController {
     // step without restarting the active mode.
     void apply(const AppSettings& settings);
 
+    // Apply a transient API state. Returns false (caller responds 409) unless the
+    // current mode is Api. On success, drives the lamps immediately.
+    bool applyApiState(const ApiState& state);
+
     // Delegate to the active mode. Call every loop().
     void tick();
 
     // The settings currently in effect.
     const AppSettings& settings() const { return settings_; }
+
+    // True when the API drives the lamps (mode == Api).
+    bool inApiMode() const { return settings_.mode == Mode::Api; }
+
+    // The transient API state currently in effect (meaningful in Api mode).
+    const ApiState& apiState() const { return apiState_; }
+
+    // Lamp mask currently lit, across whichever mode is active.
+    uint8_t currentMask() const;
 
   private:
     // Build the step table for the current mode and load it into the engine.
@@ -52,5 +68,9 @@ class ModeController {
     StepMode& step_;
     RandomMode& random_;
     AppSettings settings_;
+    ApiState apiState_;
     bool started_ = false;
+    // Serializes state access between the web-server (AsyncTCP) task and the main
+    // loop task; both call into the modes concurrently.
+    SemaphoreHandle_t mutex_;
 };

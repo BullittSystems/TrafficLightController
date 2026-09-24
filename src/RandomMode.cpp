@@ -47,6 +47,10 @@ void RandomMode::setBounds(const RandomBounds& bounds) {
     bounds_ = bounds;
 }
 
+uint8_t RandomMode::currentMask() const {
+    return hasCurrent_ ? static_cast<uint8_t>(1u << static_cast<int>(current_)) : 0;
+}
+
 void RandomMode::begin() {
     hasCurrent_ = false;  // first pick chooses among all three lamps
     pickNext();

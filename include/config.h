@@ -59,8 +59,10 @@ struct PhaseDurations {
     uint32_t redMs    = DEFAULT_RED_MS;
 };
 
-// Operating mode selected at runtime and persisted. Values are stable (persisted).
-enum class Mode : uint8_t { Sequence, Random, Solid, Blink, Off };
+// Operating mode selected at runtime and persisted.
+// NOTE: the numeric values are what get persisted, so reordering changes what a
+// previously-saved mode reads back as. Keep Off last so it bounds the valid range.
+enum class Mode : uint8_t { Api, Solid, Blink, Sequence, Random, Off };
 
 // Default random-mode hold-time bounds (ms).
 static constexpr uint32_t DEFAULT_RANDOM_MIN_MS = 1000;
@@ -92,4 +94,13 @@ struct AppSettings {
     RandomBounds random;
     SolidSettings solid;
     BlinkSettings blink;
+};
+
+// Transient API-mode state (not persisted). Set via /api/state while in Api mode;
+// resets to Off when entering Api mode and after reboot.
+enum class ApiStateKind : uint8_t { Off, Solid, Blink };
+struct ApiState {
+    ApiStateKind kind   = ApiStateKind::Off;
+    Lamp color          = Lamp::Red;
+    uint32_t intervalMs = DEFAULT_BLINK_MS;
 };

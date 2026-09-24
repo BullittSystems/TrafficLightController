@@ -68,18 +68,48 @@ bool parseColor(JsonVariantConst v, Lamp& out) {
 
 const char* modeName(Mode mode) {
     switch (mode) {
-        case Mode::Sequence:
-            return "sequence";
-        case Mode::Random:
-            return "random";
+        case Mode::Api:
+            return "api";
         case Mode::Solid:
             return "solid";
         case Mode::Blink:
             return "blink";
+        case Mode::Sequence:
+            return "sequence";
+        case Mode::Random:
+            return "random";
         case Mode::Off:
             return "off";
     }
     return "sequence";
+}
+
+const char* apiKindName(ApiStateKind kind) {
+    switch (kind) {
+        case ApiStateKind::Off:
+            return "off";
+        case ApiStateKind::Solid:
+            return "solid";
+        case ApiStateKind::Blink:
+            return "blink";
+    }
+    return "off";
+}
+
+// Name the currently-lit lamp(s) for the GET /api/state "lit" field.
+const char* litName(uint8_t mask) {
+    switch (mask) {
+        case 0:
+            return "off";
+        case lampBit(Lamp::Red):
+            return "red";
+        case lampBit(Lamp::Yellow):
+            return "yellow";
+        case lampBit(Lamp::Green):
+            return "green";
+        default:
+            return "multi";
+    }
 }
 
 const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
@@ -107,24 +137,15 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
   <form id="f">
     <label>Mode
       <select name="mode">
-        <option value="sequence">Sequence</option>
-        <option value="random">Random</option>
+        <option value="api">API</option>
         <option value="solid">Solid</option>
         <option value="blink">Blink</option>
+        <option value="sequence">Sequence</option>
+        <option value="random">Random</option>
         <option value="off">Off</option>
       </select>
     </label>
-    <fieldset id="seq">
-      <legend>Sequence durations (ms)</legend>
-      <label>Green <input type="number" name="greenMs" min="100" max="600000" step="50" required></label>
-      <label>Yellow <input type="number" name="yellowMs" min="100" max="600000" step="50" required></label>
-      <label>Red <input type="number" name="redMs" min="100" max="600000" step="50" required></label>
-    </fieldset>
-    <fieldset id="rnd">
-      <legend>Random hold time (ms)</legend>
-      <label>Min <input type="number" name="minMs" min="100" max="600000" step="50" required></label>
-      <label>Max <input type="number" name="maxMs" min="100" max="600000" step="50" required></label>
-    </fieldset>
+    <p id="api" class="muted" hidden>Lamps are driven by POST /api/state while in this mode.</p>
     <fieldset id="solid">
       <legend>Solid</legend>
       <label>Color
@@ -146,6 +167,17 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
       </label>
       <label>Interval (ms) <input type="number" name="blinkMs" min="100" max="600000" step="50" required></label>
     </fieldset>
+    <fieldset id="seq">
+      <legend>Sequence durations (ms)</legend>
+      <label>Green <input type="number" name="greenMs" min="100" max="600000" step="50" required></label>
+      <label>Yellow <input type="number" name="yellowMs" min="100" max="600000" step="50" required></label>
+      <label>Red <input type="number" name="redMs" min="100" max="600000" step="50" required></label>
+    </fieldset>
+    <fieldset id="rnd">
+      <legend>Random hold time (ms)</legend>
+      <label>Min <input type="number" name="minMs" min="100" max="600000" step="50" required></label>
+      <label>Max <input type="number" name="maxMs" min="100" max="600000" step="50" required></label>
+    </fieldset>
     <button type="submit">Save</button>
   </form>
   <p id="status" class="muted">&nbsp;</p>
@@ -153,10 +185,11 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
   const f = document.getElementById('f');
   const statusEl = document.getElementById('status');
   const fs = {
-    sequence: document.getElementById('seq'),
-    random: document.getElementById('rnd'),
+    api: document.getElementById('api'),
     solid: document.getElementById('solid'),
-    blink: document.getElementById('blink')
+    blink: document.getElementById('blink'),
+    sequence: document.getElementById('seq'),
+    random: document.getElementById('rnd')
   };
   function showFor(mode) {
     for (const key in fs) fs[key].hidden = key !== mode;
@@ -217,10 +250,14 @@ void writeSettings(JsonDocument& doc, const AppSettings& s) {
 
 WebInterface::WebInterface(Settings& settings, ModeController& controller)
     : server_(80),
-      postHandler_("/api/settings",
-                   [this](AsyncWebServerRequest* request, JsonVariant& json) {
-                       handlePostSettings(request, json);
-                   }),
+      settingsPostHandler_("/api/settings",
+                           [this](AsyncWebServerRequest* request, JsonVariant& json) {
+                               handlePostSettings(request, json);
+                           }),
+      statePostHandler_("/api/state",
+                        [this](AsyncWebServerRequest* request, JsonVariant& json) {
+                            handlePostState(request, json);
+                        }),
       settings_(settings),
       controller_(controller) {}
 
@@ -229,11 +266,70 @@ void WebInterface::begin() {
         // ESP32 flash is memory-mapped, so the PROGMEM literal is read directly.
         request->send(200, "text/html", INDEX_HTML);
     });
-    server_.on("/api/settings", HTTP_GET,
-               [this](AsyncWebServerRequest* request) { handleGetSettings(request); });
 
-    postHandler_.setMethod(HTTP_POST);
-    server_.addHandler(&postHandler_);
+    // Specific path routes MUST be registered before the generic /api/state and
+    // /api/settings GET routes below: the server matches by prefix in registration
+    // order, so a generic "/api/state" would otherwise shadow "/api/state/...".
+
+    // Webhook-friendly convenience routes (GET or POST, no body). Blink uses the
+    // current/last API interval.
+    struct StateRoute {
+        const char* path;
+        ApiStateKind kind;
+        Lamp color;
+    };
+    static const StateRoute routes[] = {
+        {"/api/state/off", ApiStateKind::Off, Lamp::Red},
+        {"/api/state/solid/red", ApiStateKind::Solid, Lamp::Red},
+        {"/api/state/solid/yellow", ApiStateKind::Solid, Lamp::Yellow},
+        {"/api/state/solid/green", ApiStateKind::Solid, Lamp::Green},
+        {"/api/state/blink/red", ApiStateKind::Blink, Lamp::Red},
+        {"/api/state/blink/yellow", ApiStateKind::Blink, Lamp::Yellow},
+        {"/api/state/blink/green", ApiStateKind::Blink, Lamp::Green},
+    };
+    for (const StateRoute& r : routes) {
+        server_.on(r.path, HTTP_GET | HTTP_POST, [this, r](AsyncWebServerRequest* request) {
+            logRequest(request);
+            ApiState state;
+            state.kind       = r.kind;
+            state.color      = r.color;
+            state.intervalMs = controller_.apiState().intervalMs;
+            applyApiCommand(request, state);
+        });
+    }
+
+    // Webhook-friendly persisted mode switches (GET or POST). Each activates the
+    // mode using its already-saved parameters.
+    struct ModeRoute {
+        const char* path;
+        Mode mode;
+    };
+    static const ModeRoute modeRoutes[] = {
+        {"/api/mode/api", Mode::Api},       {"/api/mode/solid", Mode::Solid},
+        {"/api/mode/blink", Mode::Blink},   {"/api/mode/sequence", Mode::Sequence},
+        {"/api/mode/random", Mode::Random}, {"/api/mode/off", Mode::Off},
+    };
+    for (const ModeRoute& r : modeRoutes) {
+        server_.on(r.path, HTTP_GET | HTTP_POST, [this, r](AsyncWebServerRequest* request) {
+            logRequest(request);
+            applyModeChange(request, r.mode);
+        });
+    }
+
+    // Generic reads, registered after the specific path routes (see note above).
+    server_.on("/api/settings", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        logRequest(request);
+        handleGetSettings(request);
+    });
+    server_.on("/api/state", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        logRequest(request);
+        handleGetState(request);
+    });
+
+    settingsPostHandler_.setMethod(HTTP_POST);
+    server_.addHandler(&settingsPostHandler_);
+    statePostHandler_.setMethod(HTTP_POST);
+    server_.addHandler(&statePostHandler_);
 
     server_.begin();
 }
@@ -248,6 +344,7 @@ void WebInterface::handleGetSettings(AsyncWebServerRequest* request) {
 }
 
 void WebInterface::handlePostSettings(AsyncWebServerRequest* request, JsonVariant& json) {
+    logRequest(request);
     if (!json.is<JsonObject>()) {
         request->send(400, "application/json", "{\"error\":\"expected JSON object\"}");
         return;
@@ -261,14 +358,16 @@ void WebInterface::handlePostSettings(AsyncWebServerRequest* request, JsonVarian
     // Mode: update only if present; reject a present-but-unknown value.
     JsonVariant mode = obj["mode"];
     if (!mode.isNull()) {
-        if (mode == "sequence") {
-            app.mode = Mode::Sequence;
-        } else if (mode == "random") {
-            app.mode = Mode::Random;
+        if (mode == "api") {
+            app.mode = Mode::Api;
         } else if (mode == "solid") {
             app.mode = Mode::Solid;
         } else if (mode == "blink") {
             app.mode = Mode::Blink;
+        } else if (mode == "sequence") {
+            app.mode = Mode::Sequence;
+        } else if (mode == "random") {
+            app.mode = Mode::Random;
         } else if (mode == "off") {
             app.mode = Mode::Off;
         } else {
@@ -311,4 +410,79 @@ void WebInterface::handlePostSettings(AsyncWebServerRequest* request, JsonVarian
     String body;
     serializeJson(doc, body);
     request->send(200, "application/json", body);
+}
+
+void WebInterface::handleGetState(AsyncWebServerRequest* request) {
+    JsonDocument doc;
+    doc["mode"] = modeName(controller_.settings().mode);
+    doc["lit"]  = litName(controller_.currentMask());
+
+    if (controller_.inApiMode()) {
+        const ApiState& a   = controller_.apiState();
+        JsonObject state    = doc["state"].to<JsonObject>();
+        state["state"]      = apiKindName(a.kind);
+        state["color"]      = colorName(a.color);
+        state["intervalMs"] = a.intervalMs;
+    } else {
+        doc["state"] = nullptr;
+    }
+
+    String body;
+    serializeJson(doc, body);
+    request->send(200, "application/json", body);
+}
+
+void WebInterface::handlePostState(AsyncWebServerRequest* request, JsonVariant& json) {
+    logRequest(request);
+    if (!json.is<JsonObject>()) {
+        request->send(400, "application/json", "{\"error\":\"expected JSON object\"}");
+        return;
+    }
+    JsonObject obj = json.as<JsonObject>();
+
+    ApiState state;
+    state.intervalMs = controller_.apiState().intervalMs;  // default to current
+
+    JsonVariant kind = obj["state"];
+    if (kind == "off") {
+        state.kind = ApiStateKind::Off;
+    } else if (kind == "solid") {
+        state.kind = ApiStateKind::Solid;
+    } else if (kind == "blink") {
+        state.kind = ApiStateKind::Blink;
+    } else {
+        request->send(400, "application/json", "{\"error\":\"unknown state\"}");
+        return;
+    }
+
+    // Solid and Blink require a valid color.
+    if (state.kind != ApiStateKind::Off && !parseColor(obj["color"], state.color)) {
+        request->send(400, "application/json", "{\"error\":\"invalid color\"}");
+        return;
+    }
+    state.intervalMs = clampMs(obj["intervalMs"] | state.intervalMs);
+
+    applyApiCommand(request, state);
+}
+
+void WebInterface::applyApiCommand(AsyncWebServerRequest* request, const ApiState& state) {
+    if (!controller_.applyApiState(state)) {
+        Serial.println("HTTP: /api/state rejected (not in API mode)");
+        request->send(409, "application/json", "{\"error\":\"not in API mode\"}");
+        return;
+    }
+    handleGetState(request);  // report the resulting state
+}
+
+void WebInterface::logRequest(AsyncWebServerRequest* request) {
+    Serial.printf("HTTP: %s %s from %s\n", request->methodToString(), request->url().c_str(),
+                  request->client()->remoteIP().toString().c_str());
+}
+
+void WebInterface::applyModeChange(AsyncWebServerRequest* request, Mode mode) {
+    AppSettings app = controller_.settings();
+    app.mode        = mode;
+    settings_.save(app);
+    controller_.apply(app);
+    handleGetState(request);  // report the resulting state
 }

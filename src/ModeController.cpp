@@ -23,17 +23,29 @@
  */
 #include "ModeController.h"
 
-ModeController::ModeController(StepMode& step, RandomMode& random) : step_(step), random_(random) {}
+ModeController::ModeController(StepMode& step, RandomMode& random)
+    : step_(step), random_(random), mutex_(xSemaphoreCreateMutex()) {}
 
 void ModeController::apply(const AppSettings& settings) {
+    xSemaphoreTake(mutex_, portMAX_DELAY);
     const bool modeChanged = !started_ || settings.mode != settings_.mode;
     settings_              = settings;
+
+    // Entering API mode shows a "ready" indicator (yellow blink) until the first
+    // /api/state command, so a powered, waiting device never looks dead/off.
+    if (modeChanged && settings_.mode == Mode::Api) {
+        apiState_       = ApiState{};
+        apiState_.kind  = ApiStateKind::Blink;
+        apiState_.color = Lamp::Yellow;
+        // intervalMs keeps its default (DEFAULT_BLINK_MS).
+    }
 
     random_.setBounds(settings_.random);
     loadStepTable();  // refreshes parameters; no restart on its own
 
-    // Restart only on an actual mode change (or first apply); parameter-only edits
-    // take effect on the active mode's next step without a jarring restart.
+    // Restart only on an actual mode change (or first apply). Parameter-only edits
+    // re-apply in place (refresh) so changes show immediately without restarting
+    // the cadence.
     if (modeChanged) {
         if (settings_.mode == Mode::Random) {
             random_.begin();
@@ -41,15 +53,41 @@ void ModeController::apply(const AppSettings& settings) {
             step_.begin();
         }
         started_ = true;
+    } else if (settings_.mode != Mode::Random) {
+        step_.refresh();
     }
+    xSemaphoreGive(mutex_);
+}
+
+bool ModeController::applyApiState(const ApiState& state) {
+    xSemaphoreTake(mutex_, portMAX_DELAY);
+    if (settings_.mode != Mode::Api) {
+        xSemaphoreGive(mutex_);
+        return false;
+    }
+    apiState_ = state;
+    loadStepTable();
+    step_.begin();
+    xSemaphoreGive(mutex_);
+    return true;
 }
 
 void ModeController::tick() {
+    xSemaphoreTake(mutex_, portMAX_DELAY);
     if (settings_.mode == Mode::Random) {
         random_.tick();
     } else {
         step_.tick();
     }
+    xSemaphoreGive(mutex_);
+}
+
+uint8_t ModeController::currentMask() const {
+    xSemaphoreTake(mutex_, portMAX_DELAY);
+    const uint8_t mask =
+        settings_.mode == Mode::Random ? random_.currentMask() : step_.currentMask();
+    xSemaphoreGive(mutex_);
+    return mask;
 }
 
 void ModeController::loadStepTable() {
@@ -57,14 +95,23 @@ void ModeController::loadStepTable() {
     uint8_t count = 0;
 
     switch (settings_.mode) {
-        case Mode::Sequence: {
-            const PhaseDurations& d = settings_.sequence;
-            steps[0]                = {lampBit(Lamp::Green), d.greenMs};
-            steps[1]                = {lampBit(Lamp::Yellow), d.yellowMs};
-            steps[2]                = {lampBit(Lamp::Red), d.redMs};
-            count                   = 3;
+        case Mode::Api:
+            switch (apiState_.kind) {
+                case ApiStateKind::Solid:
+                    steps[0] = {lampBit(apiState_.color), 0};
+                    count    = 1;
+                    break;
+                case ApiStateKind::Blink:
+                    steps[0] = {lampBit(apiState_.color), apiState_.intervalMs};
+                    steps[1] = {0, apiState_.intervalMs};
+                    count    = 2;
+                    break;
+                case ApiStateKind::Off:
+                    steps[0] = {0, 0};
+                    count    = 1;
+                    break;
+            }
             break;
-        }
         case Mode::Solid:
             steps[0] = {lampBit(settings_.solid.color), 0};
             count    = 1;
@@ -74,12 +121,20 @@ void ModeController::loadStepTable() {
             steps[1] = {0, settings_.blink.intervalMs};
             count    = 2;
             break;
+        case Mode::Sequence: {
+            const PhaseDurations& d = settings_.sequence;
+            steps[0]                = {lampBit(Lamp::Green), d.greenMs};
+            steps[1]                = {lampBit(Lamp::Yellow), d.yellowMs};
+            steps[2]                = {lampBit(Lamp::Red), d.redMs};
+            count                   = 3;
+            break;
+        }
+        case Mode::Random:
+            return;  // Random does not use the step engine
         case Mode::Off:
             steps[0] = {0, 0};
             count    = 1;
             break;
-        case Mode::Random:
-            return;  // Random does not use the step engine
     }
 
     step_.setSteps(steps, count);

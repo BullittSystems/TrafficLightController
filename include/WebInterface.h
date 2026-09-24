@@ -44,8 +44,20 @@ class WebInterface {
     void handleGetSettings(AsyncWebServerRequest* request);
     void handlePostSettings(AsyncWebServerRequest* request, JsonVariant& json);
 
+    // GET /api/state: report current mode, live lit lamp, and API state.
+    void handleGetState(AsyncWebServerRequest* request);
+    // POST /api/state (JSON body): set the transient API state.
+    void handlePostState(AsyncWebServerRequest* request, JsonVariant& json);
+    // Apply an API command: 409 unless in API mode, otherwise apply and report state.
+    void applyApiCommand(AsyncWebServerRequest* request, const ApiState& state);
+    // Switch the top-level mode (persisted) and report the resulting state.
+    void applyModeChange(AsyncWebServerRequest* request, Mode mode);
+    // Log an incoming API request (method, path, client IP) to the serial console.
+    void logRequest(AsyncWebServerRequest* request);
+
     AsyncWebServer server_;
-    AsyncCallbackJsonWebHandler postHandler_;
+    AsyncCallbackJsonWebHandler settingsPostHandler_;
+    AsyncCallbackJsonWebHandler statePostHandler_;
     Settings& settings_;
     ModeController& controller_;
 };

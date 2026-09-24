@@ -44,6 +44,9 @@ class RandomMode {
     // Advance to a new random lamp/duration if the current step has elapsed.
     void tick();
 
+    // Lamp mask currently lit (bit for the active lamp); 0 before the first pick.
+    uint8_t currentMask() const;
+
   private:
     void pickNext();
 
