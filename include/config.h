@@ -24,6 +24,8 @@
 
 #pragma once
 
+#include <stdint.h>
+
 // Central hardware/firmware configuration.
 // GPIO assignments resolve the "TBD" in docs/traffic-light-controller-hardware.md.
 // These pins are boot-safe on the ESP32-C3 SuperMini: they avoid the BOOT/strap
@@ -31,12 +33,25 @@
 
 // Lamp channels: active HIGH, low-side N-channel MOSFET drivers.
 // GPIO HIGH -> MOSFET ON -> lamp ON.
-static constexpr int RED_GPIO = 3;
+static constexpr int RED_GPIO    = 3;
 static constexpr int YELLOW_GPIO = 4;
-static constexpr int GREEN_GPIO = 5;
+static constexpr int GREEN_GPIO  = 5;
 
 // Wi-Fi provisioning access-point name (used in later tasks).
 static constexpr char AP_SSID[] = "TrafficLight-Setup";
 
 // Serial monitor baud (matches platformio.ini monitor_speed).
 static constexpr unsigned long SERIAL_BAUD = 115200;
+
+// Default per-phase durations (ms). Overridden at runtime by persisted Settings.
+static constexpr uint32_t DEFAULT_GREEN_MS  = 3000;
+static constexpr uint32_t DEFAULT_YELLOW_MS = 3000;
+static constexpr uint32_t DEFAULT_RED_MS    = 3000;
+
+// Traffic-light phase durations. Shared config contract between Settings and
+// Sequencer; defaults apply until overridden by persisted values.
+struct PhaseDurations {
+    uint32_t greenMs  = DEFAULT_GREEN_MS;
+    uint32_t yellowMs = DEFAULT_YELLOW_MS;
+    uint32_t redMs    = DEFAULT_RED_MS;
+};

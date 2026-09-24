@@ -26,20 +26,17 @@
 #include <stdint.h>
 
 #include "LampController.h"
-
-// Per-phase durations in milliseconds. Defaults are placeholders; these become
-// settings-driven in a later task.
-struct PhaseDurations {
-    uint32_t greenMs  = 3000;
-    uint32_t yellowMs = 3000;
-    uint32_t redMs    = 3000;
-};
+#include "config.h"
 
 // Non-blocking traffic-light state machine. Cycles GREEN -> YELLOW -> RED and
 // repeats, advancing on elapsed millis(). Exactly one lamp is lit per phase.
 class Sequencer {
   public:
     explicit Sequencer(LampController& lamps);
+
+    // Set the per-phase durations. May be called before begin() (from persisted
+    // settings) or later to update timing at runtime.
+    void setDurations(const PhaseDurations& durations);
 
     // Apply the initial phase and start timing. Call once after LampController::begin().
     void begin();

@@ -28,6 +28,10 @@
 Sequencer::Sequencer(LampController& lamps)
     : lamps_(lamps), phase_(Phase::Green), phaseStartMs_(0) {}
 
+void Sequencer::setDurations(const PhaseDurations& durations) {
+    durations_ = durations;
+}
+
 void Sequencer::begin() {
     phase_        = Phase::Green;
     phaseStartMs_ = millis();

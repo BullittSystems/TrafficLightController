@@ -29,11 +29,13 @@
 
 #include "LampController.h"
 #include "Sequencer.h"
+#include "Settings.h"
 #include "config.h"
 #include "version.h"
 
 static LampController lamps;
 static Sequencer sequencer(lamps);
+static Settings settings;
 
 void setup() {
     // Boot-safe lamp init MUST come first (per hardware doc): configure outputs
@@ -46,6 +48,13 @@ void setup() {
     Serial.printf("Traffic Light Controller v%s\n", FIRMWARE_VERSION_STRING);
     Serial.printf("Lamp GPIOs: RED=%d YELLOW=%d GREEN=%d\n", RED_GPIO, YELLOW_GPIO, GREEN_GPIO);
 
+    // Load persisted config (defaults on first boot) and start sequencing from it.
+    PhaseDurations durations = settings.load();
+    Serial.printf("Phase durations (ms): green=%lu yellow=%lu red=%lu\n",
+                  (unsigned long) durations.greenMs, (unsigned long) durations.yellowMs,
+                  (unsigned long) durations.redMs);
+
+    sequencer.setDurations(durations);
     sequencer.begin();
 }
 
