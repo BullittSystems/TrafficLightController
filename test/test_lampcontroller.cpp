@@ -55,3 +55,21 @@ TEST_F(LampControllerTest, AllOffClearsEveryLamp) {
     EXPECT_EQ(mock_pin_state[YELLOW_GPIO], LOW);
     EXPECT_EQ(mock_pin_state[GREEN_GPIO], LOW);
 }
+
+// Active-low polarity: "on" drives the pin LOW, "off" drives it HIGH. Verifies the
+// firmware is driver-agnostic (relay boards, common-anode, etc.).
+TEST_F(LampControllerTest, ActiveLowInvertsLevels) {
+    LampController activeLow(/*activeHigh=*/false);
+
+    // begin() must drive the OFF level, which is HIGH when active-low.
+    mock_pin_state[RED_GPIO] = LOW;  // pre-dirty
+    activeLow.begin();
+    EXPECT_EQ(mock_pin_state[RED_GPIO], HIGH);
+    EXPECT_EQ(mock_pin_state[YELLOW_GPIO], HIGH);
+    EXPECT_EQ(mock_pin_state[GREEN_GPIO], HIGH);
+
+    activeLow.set(Lamp::Green, true);
+    EXPECT_EQ(mock_pin_state[GREEN_GPIO], LOW);  // on = LOW
+    activeLow.set(Lamp::Green, false);
+    EXPECT_EQ(mock_pin_state[GREEN_GPIO], HIGH);  // off = HIGH
+}

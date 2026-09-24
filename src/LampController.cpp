@@ -41,6 +41,8 @@ int pinFor(Lamp lamp) {
 }
 }  // namespace
 
+LampController::LampController(bool activeHigh) : activeHigh_(activeHigh) {}
+
 void LampController::begin() {
     pinMode(RED_GPIO, OUTPUT);
     pinMode(YELLOW_GPIO, OUTPUT);
@@ -49,7 +51,10 @@ void LampController::begin() {
 }
 
 void LampController::set(Lamp lamp, bool on) {
-    digitalWrite(pinFor(lamp), on ? HIGH : LOW);
+    // Map logical on/off to the electrical level for the configured polarity:
+    // active-high drives HIGH for on, active-low drives LOW for on.
+    const bool high = (on == activeHigh_);
+    digitalWrite(pinFor(lamp), high ? HIGH : LOW);
 }
 
 void LampController::allOff() {

@@ -1,4 +1,11 @@
-# Traffic Light Controller Hardware
+# Traffic Light Controller Hardware (Reference Build)
+
+> **Scope:** The firmware's actual contract is hardware-agnostic: three GPIO
+> outputs, one per lamp, driven on/off (active-high by default, configurable via
+> `LAMP_ACTIVE_HIGH`). What those pins drive is up to the integrator. This document
+> describes **one reference implementation** — a 12V bulb + N-channel MOSFET build.
+> Any driver that meets the pin contract (LED drivers, relay boards, etc.) works
+> without firmware changes.
 
 ## Purpose
 

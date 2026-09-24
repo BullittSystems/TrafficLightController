@@ -47,9 +47,10 @@ static WebInterface web(settings, controller);
 static bool webStarted = false;
 
 void setup() {
-    // Boot-safe lamp init MUST come first (per hardware doc): configure outputs
-    // and drive LOW before any other work. Hardware 10k gate pulldowns cover the
-    // pre-firmware window; this covers everything after.
+    // Boot-safe lamp init MUST come first: configure outputs and drive them to the
+    // OFF level before any other work. The integrator's wiring should hold the OFF
+    // level pre-firmware (the reference build uses 10k gate pulldowns); begin()
+    // covers everything after.
     lamps.begin();
 
     Serial.begin(SERIAL_BAUD);

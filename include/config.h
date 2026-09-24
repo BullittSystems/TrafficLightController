@@ -34,11 +34,17 @@
 // The three lamp channels. Values are stable (persisted and used as bit indices).
 enum class Lamp : uint8_t { Red, Yellow, Green };
 
-// Lamp channels: active HIGH, low-side N-channel MOSFET drivers.
-// GPIO HIGH -> MOSFET ON -> lamp ON.
+// One GPIO output per lamp channel. These are logic-level outputs; the driver
+// electronics behind them (MOSFET, relay, LED driver, ...) are the integrator's
+// choice and immaterial to the firmware.
 static constexpr int RED_GPIO    = 3;
 static constexpr int YELLOW_GPIO = 4;
 static constexpr int GREEN_GPIO  = 5;
+
+// Output polarity. true: a HIGH pin turns its lamp on (default). false: a LOW pin
+// turns it on (active-low drivers, e.g. many relay boards). This is a wiring fact
+// fixed per build, so it is compile-time config, not a runtime setting.
+static constexpr bool LAMP_ACTIVE_HIGH = true;
 
 // Wi-Fi provisioning access-point name (used in later tasks).
 static constexpr char AP_SSID[] = "TrafficLight-Setup";

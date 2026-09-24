@@ -23,17 +23,24 @@
  */
 #pragma once
 
-#include "config.h"  // Lamp
+#include "config.h"  // Lamp, LAMP_ACTIVE_HIGH
 
-// Drives the three active-HIGH low-side lamp channels. Digital on/off only; the
-// interface is deliberately small so a PWM-backed implementation can replace it
-// later without touching callers.
+// Drives the three lamp output channels as logical on/off. Output polarity is
+// configurable (active-high by default); the load/driver electronics behind the
+// pins are the integrator's concern. Digital on/off only; the interface is
+// deliberately small so a PWM-backed implementation can replace it later without
+// touching callers.
 class LampController {
   public:
-    // Boot-safe init: configure all lamp GPIOs as outputs and drive them LOW.
-    // Must be called before any other lamp use, as early as practical in setup().
+    explicit LampController(bool activeHigh = LAMP_ACTIVE_HIGH);
+
+    // Boot-safe init: configure all lamp GPIOs as outputs and drive them to the
+    // OFF level. Must be called before any other lamp use, as early as practical.
     void begin();
 
     void set(Lamp lamp, bool on);
     void allOff();
+
+  private:
+    bool activeHigh_;
 };
