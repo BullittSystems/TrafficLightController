@@ -30,6 +30,7 @@
 #include "LampController.h"
 #include "Sequencer.h"
 #include "Settings.h"
+#include "WebInterface.h"
 #include "WifiProvisioner.h"
 #include "config.h"
 #include "version.h"
@@ -38,6 +39,8 @@ static LampController lamps;
 static Sequencer sequencer(lamps);
 static Settings settings;
 static WifiProvisioner wifi;
+static WebInterface web(sequencer);
+static bool webStarted = false;
 
 void setup() {
     // Boot-safe lamp init MUST come first (per hardware doc): configure outputs
@@ -66,4 +69,12 @@ void setup() {
 void loop() {
     sequencer.tick();
     wifi.process();
+
+    // Start the web server once, after Wi-Fi connects, so it does not contend
+    // with the provisioning portal for port 80.
+    if (!webStarted && wifi.isConnected()) {
+        web.begin();
+        webStarted = true;
+        Serial.println("Web UI: started");
+    }
 }

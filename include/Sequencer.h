@@ -44,6 +44,9 @@ class Sequencer {
     // Advance the state machine if the current phase has elapsed. Call every loop().
     void tick();
 
+    // Per-phase durations currently in effect.
+    const PhaseDurations& durations() const { return durations_; }
+
   private:
     enum class Phase { Green, Yellow, Red };
 

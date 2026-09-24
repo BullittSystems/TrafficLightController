@@ -37,6 +37,9 @@ class WifiProvisioner {
     // Drive the config portal and connection state machine. Call every loop().
     void process();
 
+    // True when connected to an access point (STA).
+    bool isConnected() const;
+
   private:
     void logStatusChange();
 
