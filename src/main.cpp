@@ -30,12 +30,14 @@
 #include "LampController.h"
 #include "Sequencer.h"
 #include "Settings.h"
+#include "WifiProvisioner.h"
 #include "config.h"
 #include "version.h"
 
 static LampController lamps;
 static Sequencer sequencer(lamps);
 static Settings settings;
+static WifiProvisioner wifi;
 
 void setup() {
     // Boot-safe lamp init MUST come first (per hardware doc): configure outputs
@@ -56,8 +58,12 @@ void setup() {
 
     sequencer.setDurations(durations);
     sequencer.begin();
+
+    // Bring up Wi-Fi in the background. Lamp sequencing never depends on it.
+    wifi.begin();
 }
 
 void loop() {
     sequencer.tick();
+    wifi.process();
 }
