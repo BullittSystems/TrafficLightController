@@ -29,10 +29,10 @@
 // opens and closes its own NVS handle, so there is no long-lived state to manage.
 class Settings {
   public:
-    // Load persisted phase durations, falling back to compile-time defaults for
-    // any value not yet stored (e.g. first boot on virgin NVS).
-    PhaseDurations load();
+    // Load persisted settings, falling back to compile-time defaults for any value
+    // not yet stored (e.g. first boot on virgin NVS).
+    AppSettings load();
 
-    // Persist phase durations. Called only on explicit user change.
-    void save(const PhaseDurations& durations);
+    // Persist settings. Called only on explicit user change.
+    void save(const AppSettings& settings);
 };

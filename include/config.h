@@ -49,9 +49,30 @@ static constexpr uint32_t DEFAULT_YELLOW_MS = 3000;
 static constexpr uint32_t DEFAULT_RED_MS    = 3000;
 
 // Traffic-light phase durations. Shared config contract between Settings and
-// Sequencer; defaults apply until overridden by persisted values.
+// SequenceMode; defaults apply until overridden by persisted values.
 struct PhaseDurations {
     uint32_t greenMs  = DEFAULT_GREEN_MS;
     uint32_t yellowMs = DEFAULT_YELLOW_MS;
     uint32_t redMs    = DEFAULT_RED_MS;
+};
+
+// Operating mode selected at runtime and persisted.
+enum class Mode : uint8_t { Sequence, Random };
+
+// Default random-mode hold-time bounds (ms).
+static constexpr uint32_t DEFAULT_RANDOM_MIN_MS = 1000;
+static constexpr uint32_t DEFAULT_RANDOM_MAX_MS = 5000;
+
+// Random-mode hold-time bounds. Each step lights one lamp for a uniform-random
+// duration in [minMs, maxMs].
+struct RandomBounds {
+    uint32_t minMs = DEFAULT_RANDOM_MIN_MS;
+    uint32_t maxMs = DEFAULT_RANDOM_MAX_MS;
+};
+
+// Complete persisted application settings.
+struct AppSettings {
+    Mode mode = Mode::Sequence;
+    PhaseDurations sequence;
+    RandomBounds random;
 };

@@ -26,30 +26,44 @@
 #include <Preferences.h>
 
 namespace {
-constexpr char NAMESPACE[]  = "traflight";
-constexpr char KEY_GREEN[]  = "green_ms";
-constexpr char KEY_YELLOW[] = "yellow_ms";
-constexpr char KEY_RED[]    = "red_ms";
+constexpr char NAMESPACE[]   = "traflight";
+constexpr char KEY_MODE[]    = "mode";
+constexpr char KEY_GREEN[]   = "green_ms";
+constexpr char KEY_YELLOW[]  = "yellow_ms";
+constexpr char KEY_RED[]     = "red_ms";
+constexpr char KEY_RND_MIN[] = "rnd_min_ms";
+constexpr char KEY_RND_MAX[] = "rnd_max_ms";
 }  // namespace
 
-PhaseDurations Settings::load() {
-    PhaseDurations d;  // starts at compile-time defaults
+AppSettings Settings::load() {
+    AppSettings s;  // starts at compile-time defaults
     Preferences prefs;
     // Read-only open returns false on a namespace that does not exist yet; the
-    // getULong defaults below then supply the compile-time values.
+    // get* defaults below then supply the compile-time values.
     prefs.begin(NAMESPACE, /*readOnly=*/true);
-    d.greenMs  = prefs.getULong(KEY_GREEN, d.greenMs);
-    d.yellowMs = prefs.getULong(KEY_YELLOW, d.yellowMs);
-    d.redMs    = prefs.getULong(KEY_RED, d.redMs);
+    s.mode              = static_cast<Mode>(prefs.getUChar(KEY_MODE, static_cast<uint8_t>(s.mode)));
+    s.sequence.greenMs  = prefs.getULong(KEY_GREEN, s.sequence.greenMs);
+    s.sequence.yellowMs = prefs.getULong(KEY_YELLOW, s.sequence.yellowMs);
+    s.sequence.redMs    = prefs.getULong(KEY_RED, s.sequence.redMs);
+    s.random.minMs      = prefs.getULong(KEY_RND_MIN, s.random.minMs);
+    s.random.maxMs      = prefs.getULong(KEY_RND_MAX, s.random.maxMs);
     prefs.end();
-    return d;
+
+    // Guard against a corrupt/unknown persisted mode value.
+    if (s.mode != Mode::Sequence && s.mode != Mode::Random) {
+        s.mode = Mode::Sequence;
+    }
+    return s;
 }
 
-void Settings::save(const PhaseDurations& durations) {
+void Settings::save(const AppSettings& settings) {
     Preferences prefs;
     prefs.begin(NAMESPACE, /*readOnly=*/false);
-    prefs.putULong(KEY_GREEN, durations.greenMs);
-    prefs.putULong(KEY_YELLOW, durations.yellowMs);
-    prefs.putULong(KEY_RED, durations.redMs);
+    prefs.putUChar(KEY_MODE, static_cast<uint8_t>(settings.mode));
+    prefs.putULong(KEY_GREEN, settings.sequence.greenMs);
+    prefs.putULong(KEY_YELLOW, settings.sequence.yellowMs);
+    prefs.putULong(KEY_RED, settings.sequence.redMs);
+    prefs.putULong(KEY_RND_MIN, settings.random.minMs);
+    prefs.putULong(KEY_RND_MAX, settings.random.maxMs);
     prefs.end();
 }

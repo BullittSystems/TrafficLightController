@@ -28,7 +28,9 @@
 #include <Arduino.h>
 
 #include "LampController.h"
-#include "Sequencer.h"
+#include "ModeController.h"
+#include "RandomMode.h"
+#include "SequenceMode.h"
 #include "Settings.h"
 #include "WebInterface.h"
 #include "WifiProvisioner.h"
@@ -36,10 +38,12 @@
 #include "version.h"
 
 static LampController lamps;
-static Sequencer sequencer(lamps);
+static SequenceMode sequenceMode(lamps);
+static RandomMode randomMode(lamps);
+static ModeController controller(sequenceMode, randomMode);
 static Settings settings;
 static WifiProvisioner wifi;
-static WebInterface web(settings, sequencer);
+static WebInterface web(settings, controller);
 static bool webStarted = false;
 
 void setup() {
@@ -53,21 +57,23 @@ void setup() {
     Serial.printf("Traffic Light Controller v%s\n", FIRMWARE_VERSION_STRING);
     Serial.printf("Lamp GPIOs: RED=%d YELLOW=%d GREEN=%d\n", RED_GPIO, YELLOW_GPIO, GREEN_GPIO);
 
-    // Load persisted config (defaults on first boot) and start sequencing from it.
-    PhaseDurations durations = settings.load();
-    Serial.printf("Phase durations (ms): green=%lu yellow=%lu red=%lu\n",
-                  (unsigned long) durations.greenMs, (unsigned long) durations.yellowMs,
-                  (unsigned long) durations.redMs);
+    // Load persisted settings (defaults on first boot) and start the active mode.
+    AppSettings app = settings.load();
+    Serial.printf("Mode: %s\n", app.mode == Mode::Random ? "random" : "sequence");
+    Serial.printf("Sequence (ms): green=%lu yellow=%lu red=%lu\n",
+                  (unsigned long) app.sequence.greenMs, (unsigned long) app.sequence.yellowMs,
+                  (unsigned long) app.sequence.redMs);
+    Serial.printf("Random bounds (ms): min=%lu max=%lu\n", (unsigned long) app.random.minMs,
+                  (unsigned long) app.random.maxMs);
 
-    sequencer.setDurations(durations);
-    sequencer.begin();
+    controller.apply(app);
 
-    // Bring up Wi-Fi in the background. Lamp sequencing never depends on it.
+    // Bring up Wi-Fi in the background. Lamp behavior never depends on it.
     wifi.begin();
 }
 
 void loop() {
-    sequencer.tick();
+    controller.tick();
     wifi.process();
 
     // Start the web server once, after Wi-Fi connects, so it does not contend

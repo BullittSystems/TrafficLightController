@@ -1,5 +1,5 @@
 /*
- * Sequencer.cpp
+ * SequenceMode.cpp
  *
  * Copyright (c) 2026 BullittSystems, Inc.
  *
@@ -21,24 +21,24 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-#include "Sequencer.h"
+#include "SequenceMode.h"
 
 #include <Arduino.h>
 
-Sequencer::Sequencer(LampController& lamps)
+SequenceMode::SequenceMode(LampController& lamps)
     : lamps_(lamps), phase_(Phase::Green), phaseStartMs_(0) {}
 
-void Sequencer::setDurations(const PhaseDurations& durations) {
+void SequenceMode::setDurations(const PhaseDurations& durations) {
     durations_ = durations;
 }
 
-void Sequencer::begin() {
+void SequenceMode::begin() {
     phase_        = Phase::Green;
     phaseStartMs_ = millis();
     applyPhase(phase_);
 }
 
-void Sequencer::tick() {
+void SequenceMode::tick() {
     // Unsigned subtraction is rollover-safe across the millis() wrap.
     if (millis() - phaseStartMs_ >= durationFor(phase_)) {
         phase_        = nextPhase(phase_);
@@ -47,7 +47,7 @@ void Sequencer::tick() {
     }
 }
 
-void Sequencer::applyPhase(Phase phase) {
+void SequenceMode::applyPhase(Phase phase) {
     lamps_.allOff();
     switch (phase) {
         case Phase::Green:
@@ -63,7 +63,7 @@ void Sequencer::applyPhase(Phase phase) {
     Serial.printf("phase -> %s\n", phaseName(phase));
 }
 
-Sequencer::Phase Sequencer::nextPhase(Phase phase) const {
+SequenceMode::Phase SequenceMode::nextPhase(Phase phase) const {
     switch (phase) {
         case Phase::Green:
             return Phase::Yellow;
@@ -75,7 +75,7 @@ Sequencer::Phase Sequencer::nextPhase(Phase phase) const {
     return Phase::Red;  // unreachable; safe default is the all-stop phase
 }
 
-uint32_t Sequencer::durationFor(Phase phase) const {
+uint32_t SequenceMode::durationFor(Phase phase) const {
     switch (phase) {
         case Phase::Green:
             return durations_.greenMs;
@@ -87,7 +87,7 @@ uint32_t Sequencer::durationFor(Phase phase) const {
     return durations_.redMs;  // unreachable
 }
 
-const char* Sequencer::phaseName(Phase phase) {
+const char* SequenceMode::phaseName(Phase phase) {
     switch (phase) {
         case Phase::Green:
             return "GREEN";

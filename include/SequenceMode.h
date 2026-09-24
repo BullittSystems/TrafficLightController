@@ -1,5 +1,5 @@
 /*
- * Sequencer.h
+ * SequenceMode.h
  *
  * Copyright (c) 2026 BullittSystems, Inc.
  *
@@ -30,9 +30,9 @@
 
 // Non-blocking traffic-light state machine. Cycles GREEN -> YELLOW -> RED and
 // repeats, advancing on elapsed millis(). Exactly one lamp is lit per phase.
-class Sequencer {
+class SequenceMode {
   public:
-    explicit Sequencer(LampController& lamps);
+    explicit SequenceMode(LampController& lamps);
 
     // Set the per-phase durations. May be called before begin() (from persisted
     // settings) or later to update timing at runtime.

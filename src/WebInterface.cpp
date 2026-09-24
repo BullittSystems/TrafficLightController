@@ -26,9 +26,9 @@
 #include <ArduinoJson.h>
 
 namespace {
-// Accepted range for any phase duration (ms). Enforced server-side regardless of
-// client input: rules out 0/near-zero (which would spin the sequencer) and values
-// so large they appear hung.
+// Accepted range for any duration (ms). Enforced server-side regardless of client
+// input: rules out 0/near-zero (which would spin a mode) and values so large they
+// appear hung.
 constexpr uint32_t MIN_MS = 100;
 constexpr uint32_t MAX_MS = 600000;
 
@@ -52,35 +52,66 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
          max-width: 28rem; margin-inline: auto; }
   h1 { font-size: 1.3rem; }
   label { display: flex; justify-content: space-between; align-items: center;
-          padding: .6rem 0; border-bottom: 1px solid #8884; }
-  input { width: 8rem; padding: .3rem; font-variant-numeric: tabular-nums; }
-  button { margin-top: 1rem; padding: .5rem 1rem; }
+          padding: .6rem 0; }
+  fieldset { border: 1px solid #8884; border-radius: .4rem; margin: 1rem 0; }
+  legend { padding: 0 .4rem; color: #888; font-size: .85rem; }
+  input, select { width: 8rem; padding: .3rem; font-variant-numeric: tabular-nums; }
+  button { margin-top: .5rem; padding: .5rem 1rem; }
   .muted { color: #888; font-size: .85rem; }
 </style>
 </head>
 <body>
   <h1>Traffic Light</h1>
   <form id="f">
-    <label>Green <input type="number" name="greenMs" min="100" max="600000" step="50" required></label>
-    <label>Yellow <input type="number" name="yellowMs" min="100" max="600000" step="50" required></label>
-    <label>Red <input type="number" name="redMs" min="100" max="600000" step="50" required></label>
+    <label>Mode
+      <select name="mode">
+        <option value="sequence">Sequence</option>
+        <option value="random">Random</option>
+      </select>
+    </label>
+    <fieldset id="seq">
+      <legend>Sequence durations (ms)</legend>
+      <label>Green <input type="number" name="greenMs" min="100" max="600000" step="50" required></label>
+      <label>Yellow <input type="number" name="yellowMs" min="100" max="600000" step="50" required></label>
+      <label>Red <input type="number" name="redMs" min="100" max="600000" step="50" required></label>
+    </fieldset>
+    <fieldset id="rnd">
+      <legend>Random hold time (ms)</legend>
+      <label>Min <input type="number" name="minMs" min="100" max="600000" step="50" required></label>
+      <label>Max <input type="number" name="maxMs" min="100" max="600000" step="50" required></label>
+    </fieldset>
     <button type="submit">Save</button>
   </form>
-  <p id="status" class="muted">Phase durations in milliseconds.</p>
+  <p id="status" class="muted">&nbsp;</p>
 <script>
   const f = document.getElementById('f');
   const statusEl = document.getElementById('status');
-  function fill(s) {
-    f.greenMs.value = s.greenMs;
-    f.yellowMs.value = s.yellowMs;
-    f.redMs.value = s.redMs;
+  const seqFs = document.getElementById('seq');
+  const rndFs = document.getElementById('rnd');
+  function showFor(mode) {
+    seqFs.hidden = mode !== 'sequence';
+    rndFs.hidden = mode !== 'random';
   }
+  function fill(s) {
+    f.mode.value = s.mode;
+    f.greenMs.value = s.sequence.greenMs;
+    f.yellowMs.value = s.sequence.yellowMs;
+    f.redMs.value = s.sequence.redMs;
+    f.minMs.value = s.random.minMs;
+    f.maxMs.value = s.random.maxMs;
+    showFor(s.mode);
+  }
+  f.mode.addEventListener('change', () => showFor(f.mode.value));
   async function load() {
     fill(await (await fetch('/api/settings')).json());
   }
   f.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const body = { greenMs: +f.greenMs.value, yellowMs: +f.yellowMs.value, redMs: +f.redMs.value };
+    const body = {
+      mode: f.mode.value,
+      sequence: { greenMs: +f.greenMs.value, yellowMs: +f.yellowMs.value, redMs: +f.redMs.value },
+      random: { minMs: +f.minMs.value, maxMs: +f.maxMs.value }
+    };
     const r = await fetch('/api/settings', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
     });
@@ -91,16 +122,28 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
 </script>
 </body>
 </html>)HTML";
+
+// Serialize the full settings object to the nested API shape.
+void writeSettings(JsonDocument& doc, const AppSettings& s) {
+    doc["mode"]     = (s.mode == Mode::Random) ? "random" : "sequence";
+    JsonObject seq  = doc["sequence"].to<JsonObject>();
+    seq["greenMs"]  = s.sequence.greenMs;
+    seq["yellowMs"] = s.sequence.yellowMs;
+    seq["redMs"]    = s.sequence.redMs;
+    JsonObject rnd  = doc["random"].to<JsonObject>();
+    rnd["minMs"]    = s.random.minMs;
+    rnd["maxMs"]    = s.random.maxMs;
+}
 }  // namespace
 
-WebInterface::WebInterface(Settings& settings, Sequencer& sequencer)
+WebInterface::WebInterface(Settings& settings, ModeController& controller)
     : server_(80),
       postHandler_("/api/settings",
                    [this](AsyncWebServerRequest* request, JsonVariant& json) {
                        handlePostSettings(request, json);
                    }),
       settings_(settings),
-      sequencer_(sequencer) {}
+      controller_(controller) {}
 
 void WebInterface::begin() {
     server_.on("/", HTTP_GET, [](AsyncWebServerRequest* request) {
@@ -117,12 +160,8 @@ void WebInterface::begin() {
 }
 
 void WebInterface::handleGetSettings(AsyncWebServerRequest* request) {
-    const PhaseDurations& d = sequencer_.durations();
-
     JsonDocument doc;
-    doc["greenMs"]  = d.greenMs;
-    doc["yellowMs"] = d.yellowMs;
-    doc["redMs"]    = d.redMs;
+    writeSettings(doc, controller_.settings());
 
     String body;
     serializeJson(doc, body);
@@ -136,20 +175,40 @@ void WebInterface::handlePostSettings(AsyncWebServerRequest* request, JsonVarian
     }
     JsonObject obj = json.as<JsonObject>();
 
-    // Start from current values so absent/invalid fields are left unchanged; the
+    // Start from current settings so absent/invalid fields are left unchanged; the
     // "| default" form yields the current value when a key is missing or mistyped.
-    PhaseDurations d = sequencer_.durations();
-    d.greenMs        = clampMs(obj["greenMs"] | d.greenMs);
-    d.yellowMs       = clampMs(obj["yellowMs"] | d.yellowMs);
-    d.redMs          = clampMs(obj["redMs"] | d.redMs);
+    AppSettings app = controller_.settings();
 
-    settings_.save(d);
-    sequencer_.setDurations(d);
+    // Mode: update only if present; reject a present-but-unknown value.
+    JsonVariant mode = obj["mode"];
+    if (!mode.isNull()) {
+        if (mode == "sequence") {
+            app.mode = Mode::Sequence;
+        } else if (mode == "random") {
+            app.mode = Mode::Random;
+        } else {
+            request->send(400, "application/json", "{\"error\":\"unknown mode\"}");
+            return;
+        }
+    }
+
+    JsonObject seq        = obj["sequence"];
+    app.sequence.greenMs  = clampMs(seq["greenMs"] | app.sequence.greenMs);
+    app.sequence.yellowMs = clampMs(seq["yellowMs"] | app.sequence.yellowMs);
+    app.sequence.redMs    = clampMs(seq["redMs"] | app.sequence.redMs);
+
+    JsonObject rnd   = obj["random"];
+    app.random.minMs = clampMs(rnd["minMs"] | app.random.minMs);
+    app.random.maxMs = clampMs(rnd["maxMs"] | app.random.maxMs);
+    if (app.random.maxMs < app.random.minMs) {
+        app.random.maxMs = app.random.minMs;
+    }
+
+    settings_.save(app);
+    controller_.apply(app);
 
     JsonDocument doc;
-    doc["greenMs"]  = d.greenMs;
-    doc["yellowMs"] = d.yellowMs;
-    doc["redMs"]    = d.redMs;
+    writeSettings(doc, controller_.settings());
 
     String body;
     serializeJson(doc, body);

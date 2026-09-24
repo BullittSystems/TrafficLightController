@@ -26,14 +26,15 @@
 #include <AsyncJson.h>
 #include <ESPAsyncWebServer.h>
 
-#include "Sequencer.h"
+#include "ModeController.h"
 #include "Settings.h"
 
 // Serves the embedded settings page and JSON API on port 80: view and edit the
-// phase durations, persisting changes and applying them to the running sequencer.
+// operating mode and its per-mode settings, persisting changes and applying them
+// to the running modes.
 class WebInterface {
   public:
-    WebInterface(Settings& settings, Sequencer& sequencer);
+    WebInterface(Settings& settings, ModeController& controller);
 
     // Register routes and start listening. Call once, after Wi-Fi has connected,
     // so the port is free of the provisioning portal.
@@ -46,5 +47,5 @@ class WebInterface {
     AsyncWebServer server_;
     AsyncCallbackJsonWebHandler postHandler_;
     Settings& settings_;
-    Sequencer& sequencer_;
+    ModeController& controller_;
 };
