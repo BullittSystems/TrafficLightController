@@ -147,3 +147,55 @@ TEST_F(ModeControllerTest, CurrentMaskReflectsLitLamp) {
     controller.apply(s);
     EXPECT_EQ(controller.currentMask(), lampBit(Lamp::Red));
 }
+
+TEST_F(ModeControllerTest, CurrentMaskReflectsRandomMode) {
+    AppSettings s = base();
+    s.mode        = Mode::Random;
+    controller.apply(s);
+    // Random single lights exactly one lamp; currentMask must match the lit pin.
+    const uint8_t mask = controller.currentMask();
+    EXPECT_EQ(mask, static_cast<uint8_t>((redOn() ? lampBit(Lamp::Red) : 0) |
+                                         (yellowOn() ? lampBit(Lamp::Yellow) : 0) |
+                                         (greenOn() ? lampBit(Lamp::Green) : 0)));
+    EXPECT_NE(mask, 0);
+}
+
+TEST_F(ModeControllerTest, ModeChangeRestartsSequenceFromGreen) {
+    AppSettings s = base();
+    s.mode        = Mode::Sequence;
+    controller.apply(s);
+    mock_advance_millis(s.sequence.greenMs);
+    controller.tick();  // now on yellow
+
+    // Leave and re-enter sequence: it should restart at green, not resume yellow.
+    AppSettings off = base();
+    off.mode        = Mode::Off;
+    controller.apply(off);
+    controller.apply(s);
+    EXPECT_TRUE(greenOn());
+    EXPECT_FALSE(yellowOn());
+}
+
+TEST_F(ModeControllerTest, ReenteringApiResetsToIdle) {
+    AppSettings s = base();
+    s.mode        = Mode::Api;
+    controller.apply(s);
+
+    // Drive it to solid red via an API command.
+    ApiState cmd;
+    cmd.kind  = ApiStateKind::Solid;
+    cmd.color = Lamp::Red;
+    ASSERT_TRUE(controller.applyApiState(cmd));
+    EXPECT_TRUE(redOn());
+
+    // Switch away and back: API state must reset to the yellow-blink idle.
+    AppSettings off = base();
+    off.mode        = Mode::Off;
+    controller.apply(off);
+    controller.apply(s);
+
+    EXPECT_TRUE(yellowOn());
+    EXPECT_FALSE(redOn());
+    EXPECT_EQ(controller.apiState().kind, ApiStateKind::Blink);
+    EXPECT_EQ(controller.apiState().color, Lamp::Yellow);
+}

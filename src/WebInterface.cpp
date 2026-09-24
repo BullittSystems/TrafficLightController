@@ -25,109 +25,9 @@
 
 #include <ArduinoJson.h>
 
+#include "SettingsCodec.h"
+
 namespace {
-// Accepted range for any duration (ms). Enforced server-side regardless of client
-// input: rules out 0/near-zero (which would spin a mode) and values so large they
-// appear hung.
-constexpr uint32_t MIN_MS = 100;
-constexpr uint32_t MAX_MS = 600000;
-
-uint32_t clampMs(uint32_t v) {
-    if (v < MIN_MS)
-        return MIN_MS;
-    if (v > MAX_MS)
-        return MAX_MS;
-    return v;
-}
-
-const char* colorName(Lamp color) {
-    switch (color) {
-        case Lamp::Red:
-            return "red";
-        case Lamp::Yellow:
-            return "yellow";
-        case Lamp::Green:
-            return "green";
-    }
-    return "red";
-}
-
-// Parse a color string into a Lamp. Returns false for any unrecognized value.
-bool parseColor(JsonVariantConst v, Lamp& out) {
-    if (v == "red") {
-        out = Lamp::Red;
-    } else if (v == "yellow") {
-        out = Lamp::Yellow;
-    } else if (v == "green") {
-        out = Lamp::Green;
-    } else {
-        return false;
-    }
-    return true;
-}
-
-const char* modeName(Mode mode) {
-    switch (mode) {
-        case Mode::Api:
-            return "api";
-        case Mode::Solid:
-            return "solid";
-        case Mode::Blink:
-            return "blink";
-        case Mode::Sequence:
-            return "sequence";
-        case Mode::Random:
-            return "random";
-        case Mode::Off:
-            return "off";
-    }
-    return "sequence";
-}
-
-const char* randomVariantName(RandomVariant variant) {
-    return variant == RandomVariant::Multi ? "multi" : "single";
-}
-
-// Parse a random variant string. Returns false for any unrecognized value.
-bool parseRandomVariant(JsonVariantConst v, RandomVariant& out) {
-    if (v == "single") {
-        out = RandomVariant::Single;
-    } else if (v == "multi") {
-        out = RandomVariant::Multi;
-    } else {
-        return false;
-    }
-    return true;
-}
-
-const char* apiKindName(ApiStateKind kind) {
-    switch (kind) {
-        case ApiStateKind::Off:
-            return "off";
-        case ApiStateKind::Solid:
-            return "solid";
-        case ApiStateKind::Blink:
-            return "blink";
-    }
-    return "off";
-}
-
-// Name the currently-lit lamp(s) for the GET /api/state "lit" field.
-const char* litName(uint8_t mask) {
-    switch (mask) {
-        case 0:
-            return "off";
-        case lampBit(Lamp::Red):
-            return "red";
-        case lampBit(Lamp::Yellow):
-            return "yellow";
-        case lampBit(Lamp::Green):
-            return "green";
-        default:
-            return "multi";
-    }
-}
-
 const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
 <html lang="en">
 <head>
@@ -252,24 +152,6 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
 </script>
 </body>
 </html>)HTML";
-
-// Serialize the full settings object to the nested API shape.
-void writeSettings(JsonDocument& doc, const AppSettings& s) {
-    doc["mode"]         = modeName(s.mode);
-    JsonObject seq      = doc["sequence"].to<JsonObject>();
-    seq["greenMs"]      = s.sequence.greenMs;
-    seq["yellowMs"]     = s.sequence.yellowMs;
-    seq["redMs"]        = s.sequence.redMs;
-    JsonObject rnd      = doc["random"].to<JsonObject>();
-    rnd["minMs"]        = s.random.minMs;
-    rnd["maxMs"]        = s.random.maxMs;
-    rnd["variant"]      = randomVariantName(s.random.variant);
-    JsonObject solid    = doc["solid"].to<JsonObject>();
-    solid["color"]      = colorName(s.solid.color);
-    JsonObject blink    = doc["blink"].to<JsonObject>();
-    blink["color"]      = colorName(s.blink.color);
-    blink["intervalMs"] = s.blink.intervalMs;
-}
 }  // namespace
 
 WebInterface::WebInterface(Settings& settings, ModeController& controller)
@@ -373,7 +255,7 @@ void WebInterface::begin() {
 
 void WebInterface::handleGetSettings(AsyncWebServerRequest* request) {
     JsonDocument doc;
-    writeSettings(doc, controller_.settings());
+    SettingsCodec::writeSettings(doc, controller_.settings());
 
     String body;
     serializeJson(doc, body);
@@ -386,68 +268,22 @@ void WebInterface::handlePostSettings(AsyncWebServerRequest* request, JsonVarian
         request->send(400, "application/json", "{\"error\":\"expected JSON object\"}");
         return;
     }
-    JsonObject obj = json.as<JsonObject>();
 
-    // Start from current settings so absent/invalid fields are left unchanged; the
-    // "| default" form yields the current value when a key is missing or mistyped.
+    // Start from current settings so absent fields are left unchanged.
     AppSettings app = controller_.settings();
-
-    // Mode: update only if present; reject a present-but-unknown value.
-    JsonVariant mode = obj["mode"];
-    if (!mode.isNull()) {
-        if (mode == "api") {
-            app.mode = Mode::Api;
-        } else if (mode == "solid") {
-            app.mode = Mode::Solid;
-        } else if (mode == "blink") {
-            app.mode = Mode::Blink;
-        } else if (mode == "sequence") {
-            app.mode = Mode::Sequence;
-        } else if (mode == "random") {
-            app.mode = Mode::Random;
-        } else if (mode == "off") {
-            app.mode = Mode::Off;
-        } else {
-            request->send(400, "application/json", "{\"error\":\"unknown mode\"}");
-            return;
-        }
-    }
-
-    JsonObject seq        = obj["sequence"];
-    app.sequence.greenMs  = clampMs(seq["greenMs"] | app.sequence.greenMs);
-    app.sequence.yellowMs = clampMs(seq["yellowMs"] | app.sequence.yellowMs);
-    app.sequence.redMs    = clampMs(seq["redMs"] | app.sequence.redMs);
-
-    JsonObject rnd   = obj["random"];
-    app.random.minMs = clampMs(rnd["minMs"] | app.random.minMs);
-    app.random.maxMs = clampMs(rnd["maxMs"] | app.random.maxMs);
-    if (app.random.maxMs < app.random.minMs) {
-        app.random.maxMs = app.random.minMs;
-    }
-    if (!rnd["variant"].isNull() && !parseRandomVariant(rnd["variant"], app.random.variant)) {
-        request->send(400, "application/json", "{\"error\":\"invalid random variant\"}");
+    const SettingsCodec::Result parse =
+        SettingsCodec::applySettingsPatch(json.as<JsonObjectConst>(), app);
+    if (!parse.ok) {
+        String err = String("{\"error\":\"") + parse.error + "\"}";
+        request->send(400, "application/json", err);
         return;
     }
-
-    // Colors: update only if present; reject a present-but-invalid value.
-    JsonObject solid = obj["solid"];
-    if (!solid["color"].isNull() && !parseColor(solid["color"], app.solid.color)) {
-        request->send(400, "application/json", "{\"error\":\"invalid solid color\"}");
-        return;
-    }
-    JsonObject blink = obj["blink"];
-    if (!blink["color"].isNull() && !parseColor(blink["color"], app.blink.color)) {
-        request->send(400, "application/json", "{\"error\":\"invalid blink color\"}");
-        return;
-    }
-    app.blink.intervalMs = clampMs(blink["intervalMs"] | app.blink.intervalMs);
 
     settings_.save(app);
     controller_.apply(app);
 
     JsonDocument doc;
-    writeSettings(doc, controller_.settings());
-
+    SettingsCodec::writeSettings(doc, controller_.settings());
     String body;
     serializeJson(doc, body);
     request->send(200, "application/json", body);
@@ -455,18 +291,8 @@ void WebInterface::handlePostSettings(AsyncWebServerRequest* request, JsonVarian
 
 void WebInterface::handleGetState(AsyncWebServerRequest* request) {
     JsonDocument doc;
-    doc["mode"] = modeName(controller_.settings().mode);
-    doc["lit"]  = litName(controller_.currentMask());
-
-    if (controller_.inApiMode()) {
-        const ApiState& a   = controller_.apiState();
-        JsonObject state    = doc["state"].to<JsonObject>();
-        state["state"]      = apiKindName(a.kind);
-        state["color"]      = colorName(a.color);
-        state["intervalMs"] = a.intervalMs;
-    } else {
-        doc["state"] = nullptr;
-    }
+    SettingsCodec::writeState(doc, controller_.settings().mode, controller_.currentMask(),
+                              controller_.inApiMode(), controller_.apiState());
 
     String body;
     serializeJson(doc, body);
@@ -479,29 +305,16 @@ void WebInterface::handlePostState(AsyncWebServerRequest* request, JsonVariant& 
         request->send(400, "application/json", "{\"error\":\"expected JSON object\"}");
         return;
     }
-    JsonObject obj = json.as<JsonObject>();
 
     ApiState state;
     state.intervalMs = controller_.apiState().intervalMs;  // default to current
-
-    JsonVariant kind = obj["state"];
-    if (kind == "off") {
-        state.kind = ApiStateKind::Off;
-    } else if (kind == "solid") {
-        state.kind = ApiStateKind::Solid;
-    } else if (kind == "blink") {
-        state.kind = ApiStateKind::Blink;
-    } else {
-        request->send(400, "application/json", "{\"error\":\"unknown state\"}");
+    const SettingsCodec::Result parse =
+        SettingsCodec::parseApiCommand(json.as<JsonObjectConst>(), state);
+    if (!parse.ok) {
+        String err = String("{\"error\":\"") + parse.error + "\"}";
+        request->send(400, "application/json", err);
         return;
     }
-
-    // Solid and Blink require a valid color.
-    if (state.kind != ApiStateKind::Off && !parseColor(obj["color"], state.color)) {
-        request->send(400, "application/json", "{\"error\":\"invalid color\"}");
-        return;
-    }
-    state.intervalMs = clampMs(obj["intervalMs"] | state.intervalMs);
 
     applyApiCommand(request, state);
 }

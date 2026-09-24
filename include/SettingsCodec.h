@@ -1,0 +1,74 @@
+/*
+ * SettingsCodec.h
+ *
+ * Copyright (c) 2026 BullittSystems, Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+#pragma once
+
+#include <ArduinoJson.h>
+#include <stdint.h>
+
+#include "config.h"
+
+// Pure (de)serialization and validation of settings/state as JSON. Kept free of
+// any web-server dependency so it can be unit-tested on the host.
+namespace SettingsCodec {
+
+// Accepted range for any duration (ms), enforced regardless of client input.
+constexpr uint32_t MIN_MS = 100;
+constexpr uint32_t MAX_MS = 600000;
+
+// Outcome of a parse: ok, or a short error message for a 400 response.
+struct Result {
+    bool ok;
+    const char* error;
+};
+
+uint32_t clampMs(uint32_t value);
+
+const char* modeName(Mode mode);
+const char* colorName(Lamp color);
+const char* randomVariantName(RandomVariant variant);
+const char* apiKindName(ApiStateKind kind);
+const char* litName(uint8_t mask);
+
+bool parseMode(JsonVariantConst v, Mode& out);
+bool parseColor(JsonVariantConst v, Lamp& out);
+bool parseVariant(JsonVariantConst v, RandomVariant& out);
+bool parseApiKind(JsonVariantConst v, ApiStateKind& out);
+
+// Serialize full settings to the nested API shape.
+void writeSettings(JsonDocument& doc, const AppSettings& s);
+
+// Serialize the GET /api/state response (mode + live lit mask + API state|null).
+void writeState(JsonDocument& doc, Mode mode, uint8_t litMask, bool inApiMode,
+                const ApiState& apiState);
+
+// Merge a settings patch (nested JSON) onto `s`. Absent fields keep their value;
+// a present-but-invalid field fails without further change being meaningful (the
+// caller discards `s` on failure).
+Result applySettingsPatch(JsonObjectConst obj, AppSettings& s);
+
+// Parse an /api/state command into `state`. Callers pre-seed state.intervalMs with
+// the current value so an omitted interval is preserved.
+Result parseApiCommand(JsonObjectConst obj, ApiState& state);
+
+}  // namespace SettingsCodec
