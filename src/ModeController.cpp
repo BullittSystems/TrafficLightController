@@ -35,35 +35,52 @@ void ModeController::apply(const AppSettings& settings) {
     // Restart only on an actual mode change (or first apply); parameter-only edits
     // take effect on the active mode's next step without a jarring restart.
     if (modeChanged) {
-        switch (settings_.mode) {
-            case Mode::Sequence:
-                step_.begin();
-                break;
-            case Mode::Random:
-                random_.begin();
-                break;
+        if (settings_.mode == Mode::Random) {
+            random_.begin();
+        } else {
+            step_.begin();
         }
         started_ = true;
     }
 }
 
 void ModeController::tick() {
-    switch (settings_.mode) {
-        case Mode::Sequence:
-            step_.tick();
-            break;
-        case Mode::Random:
-            random_.tick();
-            break;
+    if (settings_.mode == Mode::Random) {
+        random_.tick();
+    } else {
+        step_.tick();
     }
 }
 
 void ModeController::loadStepTable() {
-    const PhaseDurations& d = settings_.sequence;
-    const Step steps[]      = {
-        {lampBit(Lamp::Green), d.greenMs},
-        {lampBit(Lamp::Yellow), d.yellowMs},
-        {lampBit(Lamp::Red), d.redMs},
-    };
-    step_.setSteps(steps, 3);
+    Step steps[MAX_STEPS];
+    uint8_t count = 0;
+
+    switch (settings_.mode) {
+        case Mode::Sequence: {
+            const PhaseDurations& d = settings_.sequence;
+            steps[0]                = {lampBit(Lamp::Green), d.greenMs};
+            steps[1]                = {lampBit(Lamp::Yellow), d.yellowMs};
+            steps[2]                = {lampBit(Lamp::Red), d.redMs};
+            count                   = 3;
+            break;
+        }
+        case Mode::Solid:
+            steps[0] = {lampBit(settings_.solid.color), 0};
+            count    = 1;
+            break;
+        case Mode::Blink:
+            steps[0] = {lampBit(settings_.blink.color), settings_.blink.intervalMs};
+            steps[1] = {0, settings_.blink.intervalMs};
+            count    = 2;
+            break;
+        case Mode::Off:
+            steps[0] = {0, 0};
+            count    = 1;
+            break;
+        case Mode::Random:
+            return;  // Random does not use the step engine
+    }
+
+    step_.setSteps(steps, count);
 }

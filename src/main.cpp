@@ -65,6 +65,7 @@ void setup() {
                   (unsigned long) app.sequence.redMs);
     Serial.printf("Random bounds (ms): min=%lu max=%lu\n", (unsigned long) app.random.minMs,
                   (unsigned long) app.random.maxMs);
+    Serial.printf("Blink interval (ms): %lu\n", (unsigned long) app.blink.intervalMs);
 
     controller.apply(app);
 

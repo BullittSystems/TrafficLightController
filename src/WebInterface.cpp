@@ -40,6 +40,48 @@ uint32_t clampMs(uint32_t v) {
     return v;
 }
 
+const char* colorName(Lamp color) {
+    switch (color) {
+        case Lamp::Red:
+            return "red";
+        case Lamp::Yellow:
+            return "yellow";
+        case Lamp::Green:
+            return "green";
+    }
+    return "red";
+}
+
+// Parse a color string into a Lamp. Returns false for any unrecognized value.
+bool parseColor(JsonVariantConst v, Lamp& out) {
+    if (v == "red") {
+        out = Lamp::Red;
+    } else if (v == "yellow") {
+        out = Lamp::Yellow;
+    } else if (v == "green") {
+        out = Lamp::Green;
+    } else {
+        return false;
+    }
+    return true;
+}
+
+const char* modeName(Mode mode) {
+    switch (mode) {
+        case Mode::Sequence:
+            return "sequence";
+        case Mode::Random:
+            return "random";
+        case Mode::Solid:
+            return "solid";
+        case Mode::Blink:
+            return "blink";
+        case Mode::Off:
+            return "off";
+    }
+    return "sequence";
+}
+
 const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
 <html lang="en">
 <head>
@@ -67,6 +109,9 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
       <select name="mode">
         <option value="sequence">Sequence</option>
         <option value="random">Random</option>
+        <option value="solid">Solid</option>
+        <option value="blink">Blink</option>
+        <option value="off">Off</option>
       </select>
     </label>
     <fieldset id="seq">
@@ -80,17 +125,41 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
       <label>Min <input type="number" name="minMs" min="100" max="600000" step="50" required></label>
       <label>Max <input type="number" name="maxMs" min="100" max="600000" step="50" required></label>
     </fieldset>
+    <fieldset id="solid">
+      <legend>Solid</legend>
+      <label>Color
+        <select name="solidColor">
+          <option value="red">Red</option>
+          <option value="yellow">Yellow</option>
+          <option value="green">Green</option>
+        </select>
+      </label>
+    </fieldset>
+    <fieldset id="blink">
+      <legend>Blink</legend>
+      <label>Color
+        <select name="blinkColor">
+          <option value="red">Red</option>
+          <option value="yellow">Yellow</option>
+          <option value="green">Green</option>
+        </select>
+      </label>
+      <label>Interval (ms) <input type="number" name="blinkMs" min="100" max="600000" step="50" required></label>
+    </fieldset>
     <button type="submit">Save</button>
   </form>
   <p id="status" class="muted">&nbsp;</p>
 <script>
   const f = document.getElementById('f');
   const statusEl = document.getElementById('status');
-  const seqFs = document.getElementById('seq');
-  const rndFs = document.getElementById('rnd');
+  const fs = {
+    sequence: document.getElementById('seq'),
+    random: document.getElementById('rnd'),
+    solid: document.getElementById('solid'),
+    blink: document.getElementById('blink')
+  };
   function showFor(mode) {
-    seqFs.hidden = mode !== 'sequence';
-    rndFs.hidden = mode !== 'random';
+    for (const key in fs) fs[key].hidden = key !== mode;
   }
   function fill(s) {
     f.mode.value = s.mode;
@@ -99,6 +168,9 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
     f.redMs.value = s.sequence.redMs;
     f.minMs.value = s.random.minMs;
     f.maxMs.value = s.random.maxMs;
+    f.solidColor.value = s.solid.color;
+    f.blinkColor.value = s.blink.color;
+    f.blinkMs.value = s.blink.intervalMs;
     showFor(s.mode);
   }
   f.mode.addEventListener('change', () => showFor(f.mode.value));
@@ -110,7 +182,9 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
     const body = {
       mode: f.mode.value,
       sequence: { greenMs: +f.greenMs.value, yellowMs: +f.yellowMs.value, redMs: +f.redMs.value },
-      random: { minMs: +f.minMs.value, maxMs: +f.maxMs.value }
+      random: { minMs: +f.minMs.value, maxMs: +f.maxMs.value },
+      solid: { color: f.solidColor.value },
+      blink: { color: f.blinkColor.value, intervalMs: +f.blinkMs.value }
     };
     const r = await fetch('/api/settings', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
@@ -125,14 +199,19 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
 
 // Serialize the full settings object to the nested API shape.
 void writeSettings(JsonDocument& doc, const AppSettings& s) {
-    doc["mode"]     = (s.mode == Mode::Random) ? "random" : "sequence";
-    JsonObject seq  = doc["sequence"].to<JsonObject>();
-    seq["greenMs"]  = s.sequence.greenMs;
-    seq["yellowMs"] = s.sequence.yellowMs;
-    seq["redMs"]    = s.sequence.redMs;
-    JsonObject rnd  = doc["random"].to<JsonObject>();
-    rnd["minMs"]    = s.random.minMs;
-    rnd["maxMs"]    = s.random.maxMs;
+    doc["mode"]         = modeName(s.mode);
+    JsonObject seq      = doc["sequence"].to<JsonObject>();
+    seq["greenMs"]      = s.sequence.greenMs;
+    seq["yellowMs"]     = s.sequence.yellowMs;
+    seq["redMs"]        = s.sequence.redMs;
+    JsonObject rnd      = doc["random"].to<JsonObject>();
+    rnd["minMs"]        = s.random.minMs;
+    rnd["maxMs"]        = s.random.maxMs;
+    JsonObject solid    = doc["solid"].to<JsonObject>();
+    solid["color"]      = colorName(s.solid.color);
+    JsonObject blink    = doc["blink"].to<JsonObject>();
+    blink["color"]      = colorName(s.blink.color);
+    blink["intervalMs"] = s.blink.intervalMs;
 }
 }  // namespace
 
@@ -186,6 +265,12 @@ void WebInterface::handlePostSettings(AsyncWebServerRequest* request, JsonVarian
             app.mode = Mode::Sequence;
         } else if (mode == "random") {
             app.mode = Mode::Random;
+        } else if (mode == "solid") {
+            app.mode = Mode::Solid;
+        } else if (mode == "blink") {
+            app.mode = Mode::Blink;
+        } else if (mode == "off") {
+            app.mode = Mode::Off;
         } else {
             request->send(400, "application/json", "{\"error\":\"unknown mode\"}");
             return;
@@ -203,6 +288,19 @@ void WebInterface::handlePostSettings(AsyncWebServerRequest* request, JsonVarian
     if (app.random.maxMs < app.random.minMs) {
         app.random.maxMs = app.random.minMs;
     }
+
+    // Colors: update only if present; reject a present-but-invalid value.
+    JsonObject solid = obj["solid"];
+    if (!solid["color"].isNull() && !parseColor(solid["color"], app.solid.color)) {
+        request->send(400, "application/json", "{\"error\":\"invalid solid color\"}");
+        return;
+    }
+    JsonObject blink = obj["blink"];
+    if (!blink["color"].isNull() && !parseColor(blink["color"], app.blink.color)) {
+        request->send(400, "application/json", "{\"error\":\"invalid blink color\"}");
+        return;
+    }
+    app.blink.intervalMs = clampMs(blink["intervalMs"] | app.blink.intervalMs);
 
     settings_.save(app);
     controller_.apply(app);

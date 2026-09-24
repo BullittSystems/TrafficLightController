@@ -23,7 +23,7 @@
  */
 #pragma once
 
-enum class Lamp { Red, Yellow, Green };
+#include "config.h"  // Lamp
 
 // Drives the three active-HIGH low-side lamp channels. Digital on/off only; the
 // interface is deliberately small so a PWM-backed implementation can replace it

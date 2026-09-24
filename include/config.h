@@ -31,6 +31,9 @@
 // These pins are boot-safe on the ESP32-C3 SuperMini: they avoid the BOOT/strap
 // pins (GPIO2/8/9), the native USB pins (GPIO18/19), and UART0 (GPIO20/21).
 
+// The three lamp channels. Values are stable (persisted and used as bit indices).
+enum class Lamp : uint8_t { Red, Yellow, Green };
+
 // Lamp channels: active HIGH, low-side N-channel MOSFET drivers.
 // GPIO HIGH -> MOSFET ON -> lamp ON.
 static constexpr int RED_GPIO    = 3;
@@ -56,8 +59,8 @@ struct PhaseDurations {
     uint32_t redMs    = DEFAULT_RED_MS;
 };
 
-// Operating mode selected at runtime and persisted.
-enum class Mode : uint8_t { Sequence, Random };
+// Operating mode selected at runtime and persisted. Values are stable (persisted).
+enum class Mode : uint8_t { Sequence, Random, Solid, Blink, Off };
 
 // Default random-mode hold-time bounds (ms).
 static constexpr uint32_t DEFAULT_RANDOM_MIN_MS = 1000;
@@ -70,9 +73,23 @@ struct RandomBounds {
     uint32_t maxMs = DEFAULT_RANDOM_MAX_MS;
 };
 
+// Solid mode: hold one color steady.
+struct SolidSettings {
+    Lamp color = Lamp::Green;
+};
+
+// Blink mode: flash one color, symmetric on/off at intervalMs.
+static constexpr uint32_t DEFAULT_BLINK_MS = 500;
+struct BlinkSettings {
+    Lamp color          = Lamp::Red;
+    uint32_t intervalMs = DEFAULT_BLINK_MS;
+};
+
 // Complete persisted application settings.
 struct AppSettings {
     Mode mode = Mode::Sequence;
     PhaseDurations sequence;
     RandomBounds random;
+    SolidSettings solid;
+    BlinkSettings blink;
 };

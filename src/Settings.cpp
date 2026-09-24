@@ -26,13 +26,27 @@
 #include <Preferences.h>
 
 namespace {
-constexpr char NAMESPACE[]   = "traflight";
-constexpr char KEY_MODE[]    = "mode";
-constexpr char KEY_GREEN[]   = "green_ms";
-constexpr char KEY_YELLOW[]  = "yellow_ms";
-constexpr char KEY_RED[]     = "red_ms";
-constexpr char KEY_RND_MIN[] = "rnd_min_ms";
-constexpr char KEY_RND_MAX[] = "rnd_max_ms";
+constexpr char NAMESPACE[]     = "traflight";
+constexpr char KEY_MODE[]      = "mode";
+constexpr char KEY_GREEN[]     = "green_ms";
+constexpr char KEY_YELLOW[]    = "yellow_ms";
+constexpr char KEY_RED[]       = "red_ms";
+constexpr char KEY_RND_MIN[]   = "rnd_min_ms";
+constexpr char KEY_RND_MAX[]   = "rnd_max_ms";
+constexpr char KEY_SOLID_CLR[] = "solid_color";
+constexpr char KEY_BLINK_CLR[] = "blink_color";
+constexpr char KEY_BLINK_MS[]  = "blink_ms";
+
+// Coerce a persisted byte back to a valid Lamp, defaulting on anything unexpected.
+Lamp toLamp(uint8_t value, Lamp fallback) {
+    switch (static_cast<Lamp>(value)) {
+        case Lamp::Red:
+        case Lamp::Yellow:
+        case Lamp::Green:
+            return static_cast<Lamp>(value);
+    }
+    return fallback;
+}
 }  // namespace
 
 AppSettings Settings::load() {
@@ -47,10 +61,15 @@ AppSettings Settings::load() {
     s.sequence.redMs    = prefs.getULong(KEY_RED, s.sequence.redMs);
     s.random.minMs      = prefs.getULong(KEY_RND_MIN, s.random.minMs);
     s.random.maxMs      = prefs.getULong(KEY_RND_MAX, s.random.maxMs);
+    s.solid.color =
+        toLamp(prefs.getUChar(KEY_SOLID_CLR, static_cast<uint8_t>(s.solid.color)), s.solid.color);
+    s.blink.color =
+        toLamp(prefs.getUChar(KEY_BLINK_CLR, static_cast<uint8_t>(s.blink.color)), s.blink.color);
+    s.blink.intervalMs = prefs.getULong(KEY_BLINK_MS, s.blink.intervalMs);
     prefs.end();
 
-    // Guard against a corrupt/unknown persisted mode value.
-    if (s.mode != Mode::Sequence && s.mode != Mode::Random) {
+    // Guard against a corrupt/out-of-range persisted mode value.
+    if (static_cast<uint8_t>(s.mode) > static_cast<uint8_t>(Mode::Off)) {
         s.mode = Mode::Sequence;
     }
     return s;
@@ -65,5 +84,8 @@ void Settings::save(const AppSettings& settings) {
     prefs.putULong(KEY_RED, settings.sequence.redMs);
     prefs.putULong(KEY_RND_MIN, settings.random.minMs);
     prefs.putULong(KEY_RND_MAX, settings.random.maxMs);
+    prefs.putUChar(KEY_SOLID_CLR, static_cast<uint8_t>(settings.solid.color));
+    prefs.putUChar(KEY_BLINK_CLR, static_cast<uint8_t>(settings.blink.color));
+    prefs.putULong(KEY_BLINK_MS, settings.blink.intervalMs);
     prefs.end();
 }
