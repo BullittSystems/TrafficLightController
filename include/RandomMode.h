@@ -28,31 +28,34 @@
 #include "LampController.h"
 #include "config.h"
 
-// Non-blocking random light mode. Lights exactly one lamp at a time; each step
-// picks a lamp uniformly at random from the two not currently lit and holds it
-// for a uniform-random duration in [minMs, maxMs].
+// Non-blocking random light mode. Each step lights a random target and holds it
+// for a uniform-random duration in [minMs, maxMs], then picks a new one that
+// differs from the current. In Single variant the target is one lamp; in Multi it
+// is a random non-empty subset (1-3 lamps).
 class RandomMode {
   public:
     explicit RandomMode(LampController& lamps);
 
-    // Set the hold-time bounds. Takes effect on the next step; safe to call at runtime.
-    void setBounds(const RandomBounds& bounds);
+    // Set bounds + variant. Takes effect on the next step; safe to call at runtime.
+    void setSettings(const RandomSettings& settings);
 
-    // Pick an initial lamp/duration and start. Call after LampController::begin().
+    // Pick an initial target/duration and start. Call after LampController::begin().
     void begin();
 
-    // Advance to a new random lamp/duration if the current step has elapsed.
+    // Advance to a new random target/duration if the current step has elapsed.
     void tick();
 
-    // Lamp mask currently lit (bit for the active lamp); 0 before the first pick.
-    uint8_t currentMask() const;
+    // Lamp mask currently lit; 0 before the first pick.
+    uint8_t currentMask() const { return hasCurrent_ ? currentMask_ : 0; }
 
   private:
     void pickNext();
+    uint8_t pickSingleMask() const;
+    uint8_t pickMultiMask() const;
 
     LampController& lamps_;
-    RandomBounds bounds_;
-    Lamp current_;
+    RandomSettings settings_;
+    uint8_t currentMask_;
     uint32_t stepStartMs_;
     uint32_t stepDurationMs_;
     bool hasCurrent_ = false;

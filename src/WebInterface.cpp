@@ -84,6 +84,22 @@ const char* modeName(Mode mode) {
     return "sequence";
 }
 
+const char* randomVariantName(RandomVariant variant) {
+    return variant == RandomVariant::Multi ? "multi" : "single";
+}
+
+// Parse a random variant string. Returns false for any unrecognized value.
+bool parseRandomVariant(JsonVariantConst v, RandomVariant& out) {
+    if (v == "single") {
+        out = RandomVariant::Single;
+    } else if (v == "multi") {
+        out = RandomVariant::Multi;
+    } else {
+        return false;
+    }
+    return true;
+}
+
 const char* apiKindName(ApiStateKind kind) {
     switch (kind) {
         case ApiStateKind::Off:
@@ -175,6 +191,12 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
     </fieldset>
     <fieldset id="rnd">
       <legend>Random hold time (ms)</legend>
+      <label>Lamps
+        <select name="randomVariant">
+          <option value="single">Single</option>
+          <option value="multi">Multiple</option>
+        </select>
+      </label>
       <label>Min <input type="number" name="minMs" min="100" max="600000" step="50" required></label>
       <label>Max <input type="number" name="maxMs" min="100" max="600000" step="50" required></label>
     </fieldset>
@@ -201,6 +223,7 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
     f.redMs.value = s.sequence.redMs;
     f.minMs.value = s.random.minMs;
     f.maxMs.value = s.random.maxMs;
+    f.randomVariant.value = s.random.variant;
     f.solidColor.value = s.solid.color;
     f.blinkColor.value = s.blink.color;
     f.blinkMs.value = s.blink.intervalMs;
@@ -215,7 +238,7 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
     const body = {
       mode: f.mode.value,
       sequence: { greenMs: +f.greenMs.value, yellowMs: +f.yellowMs.value, redMs: +f.redMs.value },
-      random: { minMs: +f.minMs.value, maxMs: +f.maxMs.value },
+      random: { minMs: +f.minMs.value, maxMs: +f.maxMs.value, variant: f.randomVariant.value },
       solid: { color: f.solidColor.value },
       blink: { color: f.blinkColor.value, intervalMs: +f.blinkMs.value }
     };
@@ -240,6 +263,7 @@ void writeSettings(JsonDocument& doc, const AppSettings& s) {
     JsonObject rnd      = doc["random"].to<JsonObject>();
     rnd["minMs"]        = s.random.minMs;
     rnd["maxMs"]        = s.random.maxMs;
+    rnd["variant"]      = randomVariantName(s.random.variant);
     JsonObject solid    = doc["solid"].to<JsonObject>();
     solid["color"]      = colorName(s.solid.color);
     JsonObject blink    = doc["blink"].to<JsonObject>();
@@ -297,6 +321,19 @@ void WebInterface::begin() {
             applyApiCommand(request, state);
         });
     }
+
+    // Random variant convenience routes (persisted). MUST be registered before the
+    // generic /api/mode/random below, which prefix-matches these.
+    server_.on("/api/mode/random/single", HTTP_GET | HTTP_POST,
+               [this](AsyncWebServerRequest* request) {
+                   logRequest(request);
+                   applyRandomVariant(request, RandomVariant::Single);
+               });
+    server_.on("/api/mode/random/multi", HTTP_GET | HTTP_POST,
+               [this](AsyncWebServerRequest* request) {
+                   logRequest(request);
+                   applyRandomVariant(request, RandomVariant::Multi);
+               });
 
     // Webhook-friendly persisted mode switches (GET or POST). Each activates the
     // mode using its already-saved parameters.
@@ -386,6 +423,10 @@ void WebInterface::handlePostSettings(AsyncWebServerRequest* request, JsonVarian
     app.random.maxMs = clampMs(rnd["maxMs"] | app.random.maxMs);
     if (app.random.maxMs < app.random.minMs) {
         app.random.maxMs = app.random.minMs;
+    }
+    if (!rnd["variant"].isNull() && !parseRandomVariant(rnd["variant"], app.random.variant)) {
+        request->send(400, "application/json", "{\"error\":\"invalid random variant\"}");
+        return;
     }
 
     // Colors: update only if present; reject a present-but-invalid value.
@@ -482,6 +523,15 @@ void WebInterface::logRequest(AsyncWebServerRequest* request) {
 void WebInterface::applyModeChange(AsyncWebServerRequest* request, Mode mode) {
     AppSettings app = controller_.settings();
     app.mode        = mode;
+    settings_.save(app);
+    controller_.apply(app);
+    handleGetState(request);  // report the resulting state
+}
+
+void WebInterface::applyRandomVariant(AsyncWebServerRequest* request, RandomVariant variant) {
+    AppSettings app    = controller_.settings();
+    app.mode           = Mode::Random;
+    app.random.variant = variant;
     settings_.save(app);
     controller_.apply(app);
     handleGetState(request);  // report the resulting state

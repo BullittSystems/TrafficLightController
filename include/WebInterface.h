@@ -52,6 +52,8 @@ class WebInterface {
     void applyApiCommand(AsyncWebServerRequest* request, const ApiState& state);
     // Switch the top-level mode (persisted) and report the resulting state.
     void applyModeChange(AsyncWebServerRequest* request, Mode mode);
+    // Switch to Random mode with a specific variant (persisted) and report state.
+    void applyRandomVariant(AsyncWebServerRequest* request, RandomVariant variant);
     // Log an incoming API request (method, path, client IP) to the serial console.
     void logRequest(AsyncWebServerRequest* request);
 

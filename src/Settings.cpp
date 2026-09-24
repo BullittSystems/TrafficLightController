@@ -33,6 +33,7 @@ constexpr char KEY_YELLOW[]    = "yellow_ms";
 constexpr char KEY_RED[]       = "red_ms";
 constexpr char KEY_RND_MIN[]   = "rnd_min_ms";
 constexpr char KEY_RND_MAX[]   = "rnd_max_ms";
+constexpr char KEY_RND_VAR[]   = "rnd_variant";
 constexpr char KEY_SOLID_CLR[] = "solid_color";
 constexpr char KEY_BLINK_CLR[] = "blink_color";
 constexpr char KEY_BLINK_MS[]  = "blink_ms";
@@ -61,6 +62,12 @@ AppSettings Settings::load() {
     s.sequence.redMs    = prefs.getULong(KEY_RED, s.sequence.redMs);
     s.random.minMs      = prefs.getULong(KEY_RND_MIN, s.random.minMs);
     s.random.maxMs      = prefs.getULong(KEY_RND_MAX, s.random.maxMs);
+    if (prefs.getUChar(KEY_RND_VAR, static_cast<uint8_t>(s.random.variant)) ==
+        static_cast<uint8_t>(RandomVariant::Multi)) {
+        s.random.variant = RandomVariant::Multi;
+    } else {
+        s.random.variant = RandomVariant::Single;
+    }
     s.solid.color =
         toLamp(prefs.getUChar(KEY_SOLID_CLR, static_cast<uint8_t>(s.solid.color)), s.solid.color);
     s.blink.color =
@@ -85,6 +92,7 @@ void Settings::save(const AppSettings& settings) {
     prefs.putULong(KEY_RED, settings.sequence.redMs);
     prefs.putULong(KEY_RND_MIN, settings.random.minMs);
     prefs.putULong(KEY_RND_MAX, settings.random.maxMs);
+    prefs.putUChar(KEY_RND_VAR, static_cast<uint8_t>(settings.random.variant));
     prefs.putUChar(KEY_SOLID_CLR, static_cast<uint8_t>(settings.solid.color));
     prefs.putUChar(KEY_BLINK_CLR, static_cast<uint8_t>(settings.blink.color));
     prefs.putULong(KEY_BLINK_MS, settings.blink.intervalMs);

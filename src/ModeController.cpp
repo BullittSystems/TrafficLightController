@@ -40,7 +40,7 @@ void ModeController::apply(const AppSettings& settings) {
         // intervalMs keeps its default (DEFAULT_BLINK_MS).
     }
 
-    random_.setBounds(settings_.random);
+    random_.setSettings(settings_.random);
     loadStepTable();  // refreshes parameters; no restart on its own
 
     // Restart only on an actual mode change (or first apply). Parameter-only edits

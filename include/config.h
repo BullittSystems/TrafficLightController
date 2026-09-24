@@ -68,11 +68,16 @@ enum class Mode : uint8_t { Api, Solid, Blink, Sequence, Random, Off };
 static constexpr uint32_t DEFAULT_RANDOM_MIN_MS = 1000;
 static constexpr uint32_t DEFAULT_RANDOM_MAX_MS = 5000;
 
-// Random-mode hold-time bounds. Each step lights one lamp for a uniform-random
-// duration in [minMs, maxMs].
-struct RandomBounds {
-    uint32_t minMs = DEFAULT_RANDOM_MIN_MS;
-    uint32_t maxMs = DEFAULT_RANDOM_MAX_MS;
+// Random-mode variant: Single lights one lamp per step; Multi lights a random
+// non-empty subset (1-3 lamps) per step.
+enum class RandomVariant : uint8_t { Single, Multi };
+
+// Random-mode settings. Each step holds its target for a uniform-random duration
+// in [minMs, maxMs].
+struct RandomSettings {
+    uint32_t minMs        = DEFAULT_RANDOM_MIN_MS;
+    uint32_t maxMs        = DEFAULT_RANDOM_MAX_MS;
+    RandomVariant variant = RandomVariant::Single;
 };
 
 // Solid mode: hold one color steady.
@@ -91,7 +96,7 @@ struct BlinkSettings {
 struct AppSettings {
     Mode mode = Mode::Sequence;
     PhaseDurations sequence;
-    RandomBounds random;
+    RandomSettings random;
     SolidSettings solid;
     BlinkSettings blink;
 };
