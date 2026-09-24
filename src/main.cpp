@@ -39,7 +39,7 @@ static LampController lamps;
 static Sequencer sequencer(lamps);
 static Settings settings;
 static WifiProvisioner wifi;
-static WebInterface web(sequencer);
+static WebInterface web(settings, sequencer);
 static bool webStarted = false;
 
 void setup() {
