@@ -49,6 +49,10 @@ static constexpr bool LAMP_ACTIVE_HIGH = true;
 // Wi-Fi provisioning access-point name.
 static constexpr char AP_SSID[] = "TrafficLight-Setup";
 
+// How long to attempt a background connect with saved credentials before giving up
+// and opening the provisioning portal. The attempt is non-blocking either way.
+static constexpr uint32_t WIFI_STA_CONNECT_TIMEOUT_MS = 15000;
+
 // BOOT button. Held for WIFI_RESET_HOLD_MS while the firmware is running, it clears
 // saved Wi-Fi credentials and restarts into the provisioning portal. (Must be held
 // after boot, not through reset: GPIO9 low at reset enters the ROM bootloader.)

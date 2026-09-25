@@ -44,8 +44,11 @@ class WifiProvisioner {
     void resetCredentials();
 
   private:
+    void startPortal();
     void logStatusChange();
 
     WiFiManager wm_;
-    bool wasConnected_ = false;
+    uint32_t staStartMs_ = 0;
+    bool portalStarted_  = false;
+    bool wasConnected_   = false;
 };

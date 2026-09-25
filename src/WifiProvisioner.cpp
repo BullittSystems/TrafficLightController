@@ -29,22 +29,38 @@
 #include "config.h"
 
 void WifiProvisioner::begin() {
-    // Non-blocking: autoConnect returns immediately. With saved credentials it
-    // connects; otherwise it opens the config portal AP and returns false, and
-    // process() drives the portal from the main loop without stalling sequencing.
+    // Fully non-blocking bring-up: never call the blocking autoConnect(), which
+    // stalls setup() (and therefore the lamps) in waitForConnectResult() when a
+    // saved network is present but slow/failing. Instead kick off an async STA
+    // connect here and drive everything from process() so loop() runs immediately.
     wm_.setConfigPortalBlocking(false);
+    WiFi.mode(WIFI_STA);
 
-    if (wm_.autoConnect(AP_SSID)) {
-        wasConnected_ = true;
-        Serial.printf("WiFi: connected, IP=%s\n", WiFi.localIP().toString().c_str());
+    if (wm_.getWiFiIsSaved()) {
+        WiFi.begin();  // async; uses persisted credentials
+        staStartMs_ = millis();
+        Serial.println("WiFi: connecting with saved credentials...");
     } else {
-        Serial.printf("WiFi: config portal '%s' active (connect to provision)\n", AP_SSID);
+        startPortal();
     }
 }
 
 void WifiProvisioner::process() {
-    wm_.process();
+    if (portalStarted_) {
+        wm_.process();
+    } else if (WiFi.status() != WL_CONNECTED &&
+               millis() - staStartMs_ >= WIFI_STA_CONNECT_TIMEOUT_MS) {
+        Serial.println("WiFi: saved-credential connect timed out");
+        startPortal();
+    }
     logStatusChange();
+}
+
+void WifiProvisioner::startPortal() {
+    // Non-blocking (setConfigPortalBlocking(false)); process() services it.
+    wm_.startConfigPortal(AP_SSID);
+    portalStarted_ = true;
+    Serial.printf("WiFi: config portal '%s' active (connect to provision)\n", AP_SSID);
 }
 
 bool WifiProvisioner::isConnected() const {
