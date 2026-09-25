@@ -56,6 +56,11 @@ void WifiProvisioner::begin() {
     wm.setConfigPortalBlocking(false);
     wm.setConnectTimeout(WIFI_PORTAL_CONNECT_TIMEOUT_S);
     WiFi.mode(WIFI_STA);
+#ifdef TLC_BOARD_C3
+    // The C3 SuperMini's antenna layout often fails to associate at full TX power;
+    // capping it is the widely reported fix. Must follow WiFi.mode().
+    WiFi.setTxPower(WIFI_POWER_8_5dBm);
+#endif
 
     xSemaphoreTake(mutex_, portMAX_DELAY);
     networks_.load();
