@@ -68,6 +68,16 @@ static constexpr uint32_t WIFI_STA_CONNECT_TIMEOUT_MS = 15000;
 // Upper bound on the async scan for known networks before falling back to the portal.
 static constexpr uint32_t WIFI_SCAN_TIMEOUT_MS = 10000;
 
+// While the provisioning portal is up, rescan this often for a saved network in
+// range and leave the portal for it (only when no phone is connected to the portal).
+static constexpr uint32_t WIFI_PORTAL_RESCAN_MS = 60000;
+
+// Portals opened on purpose (BOOT button) or after a failed connect wait this long
+// before their first rescan: the first so it isn't left for a nearby saved network
+// before the user can join it, the second so a network that is in range but refuses
+// us (e.g. a changed password) doesn't pull the portal down every cycle.
+static constexpr uint32_t WIFI_PORTAL_GRACE_MS = 300000;
+
 // Bounds the (blocking) connect WiFiManager performs when the portal form is saved.
 static constexpr unsigned long WIFI_PORTAL_CONNECT_TIMEOUT_S = 10;
 

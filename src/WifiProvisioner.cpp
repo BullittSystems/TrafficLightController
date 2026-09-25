@@ -85,7 +85,7 @@ void WifiProvisioner::begin() {
 
     if (portalRequested) {
         Serial.println("WiFi: portal requested (saved networks kept)");
-        startPortal();
+        startPortal(WIFI_PORTAL_GRACE_MS);
     } else {
         startScanOrPortal();
     }
@@ -120,7 +120,9 @@ void WifiProvisioner::process() {
                 enter(State::Connected);
             } else if (millis() - stateStartMs_ >= WIFI_STA_CONNECT_TIMEOUT_MS) {
                 Serial.printf("WiFi: '%s' did not connect\n", connectingSsid_);
-                startPortal();
+                // Longer first wait: a network that is in range but refuses us (e.g.
+                // a changed password) would otherwise pull the portal down every cycle.
+                startPortal(WIFI_PORTAL_GRACE_MS);
             }
             break;
 
@@ -142,6 +144,8 @@ void WifiProvisioner::process() {
             if (wm.process()) {  // true once the portal has joined a network
                 captureProvisionedNetwork();
                 enter(State::Connected);
+            } else {
+                rescanFromPortal();
             }
             break;
     }
@@ -153,10 +157,15 @@ void WifiProvisioner::enter(State state) {
     stateStartMs_ = millis();
 }
 
-void WifiProvisioner::startScanOrPortal() {
+unsigned WifiProvisioner::candidateCount() const {
     xSemaphoreTake(mutex_, portMAX_DELAY);
     const unsigned candidates = networks_.count() + (hasSession_ ? 1 : 0);
     xSemaphoreGive(mutex_);
+    return candidates;
+}
+
+void WifiProvisioner::startScanOrPortal() {
+    const unsigned candidates = candidateCount();
     if (candidates == 0) {
         startPortal();
         return;
@@ -179,11 +188,11 @@ const KnownNetwork* WifiProvisioner::credentialsFor(const char* ssid) const {
     return nullptr;
 }
 
-void WifiProvisioner::connectToBestScanResult(int16_t found) {
-    // Pick the strongest visible network that we have credentials for. Copy it out
-    // under the lock, since a handler may edit the list once the lock is released.
-    KnownNetwork best = {};
-    int32_t bestRssi  = INT32_MIN;
+bool WifiProvisioner::bestScanResult(int16_t found, KnownNetwork& best, int32_t& bestRssi) const {
+    // Copy the credentials out under the lock, since a handler may edit the list once
+    // the lock is released.
+    best     = {};
+    bestRssi = INT32_MIN;
     xSemaphoreTake(mutex_, portMAX_DELAY);
     for (int16_t i = 0; i < found; i++) {
         const KnownNetwork* net = credentialsFor(WiFi.SSID(i).c_str());
@@ -193,25 +202,74 @@ void WifiProvisioner::connectToBestScanResult(int16_t found) {
         }
     }
     xSemaphoreGive(mutex_);
+    return best.ssid[0] != '\0';
+}
 
-    if (best.ssid[0] == '\0') {
+void WifiProvisioner::connectToBestScanResult(int16_t found) {
+    KnownNetwork best;
+    int32_t bestRssi;
+    if (!bestScanResult(found, best, bestRssi)) {
         Serial.println("WiFi: no known network in range");
         startPortal();
         return;
     }
-
-    copySsid(connectingSsid_, best.ssid);
-    WiFi.begin(best.ssid, best.password);
-    enter(State::Connecting);
-    Serial.printf("WiFi: connecting to '%s' (%ld dBm)...\n", connectingSsid_,
-                  static_cast<long>(bestRssi));
+    connectTo(best, bestRssi);
 }
 
-void WifiProvisioner::startPortal() {
+void WifiProvisioner::connectTo(const KnownNetwork& net, int32_t rssi) {
+    copySsid(connectingSsid_, net.ssid);
+    WiFi.begin(net.ssid, net.password);
+    enter(State::Connecting);
+    Serial.printf("WiFi: connecting to '%s' (%ld dBm)...\n", connectingSsid_,
+                  static_cast<long>(rssi));
+}
+
+void WifiProvisioner::startPortal(uint32_t firstRescanMs) {
     // Non-blocking (setConfigPortalBlocking(false)); process() services it.
     wm.startConfigPortal(AP_SSID);
     enter(State::Portal);
+    portalScanning_ = false;
+    rescanDelayMs_  = firstRescanMs;
+    rescanFromMs_   = millis();
     Serial.printf("WiFi: config portal '%s' active (connect to provision)\n", AP_SSID);
+}
+
+void WifiProvisioner::rescanFromPortal() {
+    // The portal otherwise never looks again, so a device that lost its network
+    // while powered would sit here until power-cycled.
+    if (portalScanning_) {
+        const int16_t found = WiFi.scanComplete();
+        if (found == WIFI_SCAN_RUNNING && millis() - rescanFromMs_ < WIFI_SCAN_TIMEOUT_MS) {
+            return;
+        }
+        portalScanning_ = false;
+        rescanDelayMs_  = WIFI_PORTAL_RESCAN_MS;
+        rescanFromMs_   = millis();
+
+        KnownNetwork best;
+        int32_t bestRssi;
+        if (found > 0 && bestScanResult(found, best, bestRssi)) {
+            // Leaving the portal blocks ~1 s in WiFiManager (lamps pause once).
+            Serial.printf("WiFi: '%s' back in range, leaving the portal\n", best.ssid);
+            wm.stopConfigPortal();
+            connectTo(best, bestRssi);
+        }
+        // Results are left in place, not deleted: WiFiManager's network list page
+        // reads the same core scan store.
+        return;
+    }
+
+    if (millis() - rescanFromMs_ < rescanDelayMs_) {
+        return;
+    }
+    // Nothing to look for (first boot, or all forgotten): stay in the portal.
+    // A phone on the portal would be disrupted by the radio leaving its channel.
+    if (candidateCount() == 0 || WiFi.softAPgetStationNum() > 0) {
+        return;
+    }
+    WiFi.scanNetworks(/*async=*/true);
+    portalScanning_ = true;
+    rescanFromMs_   = millis();
 }
 
 void WifiProvisioner::captureProvisionedNetwork() {

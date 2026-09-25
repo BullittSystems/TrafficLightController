@@ -27,6 +27,7 @@
 #include <freertos/semphr.h>
 
 #include "KnownNetworks.h"
+#include "config.h"
 
 // Connects to the strongest in-range network from a saved list, falling back to a
 // WiFiManager captive portal when none are reachable. Networks provisioned through
@@ -82,8 +83,15 @@ class WifiProvisioner {
     void enter(State state);
     void startScanOrPortal();
     void connectToBestScanResult(int16_t found);
+    // Strongest in-range network we have credentials for, copied out under the lock.
+    bool bestScanResult(int16_t found, KnownNetwork& best, int32_t& bestRssi) const;
+    void connectTo(const KnownNetwork& net, int32_t rssi);
+    unsigned candidateCount() const;
+    // While in the portal, periodically scan for a saved network and leave for it.
+    void rescanFromPortal();
     const KnownNetwork* credentialsFor(const char* ssid) const;
-    void startPortal();
+    // Open the portal; the first background rescan waits firstRescanMs.
+    void startPortal(uint32_t firstRescanMs = WIFI_PORTAL_RESCAN_MS);
     void captureProvisionedNetwork();
     void logStatusChange();
 
@@ -94,6 +102,9 @@ class WifiProvisioner {
     State state_             = State::Scanning;
     uint32_t stateStartMs_   = 0;
     uint32_t lostSinceMs_    = 0;
+    uint32_t rescanDelayMs_  = 0;  // wait before the next portal rescan
+    uint32_t rescanFromMs_   = 0;  // ...measured from here
+    bool portalScanning_     = false;
     char connectingSsid_[33] = {};
     bool wasConnected_       = false;
 };

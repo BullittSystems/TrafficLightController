@@ -73,7 +73,13 @@ Decoupled layers; lamp behavior never depends on the network.
   becomes a RAM-only **session network** (used until reboot, also a rescan
   candidate) that the user can persist via `keepSessionNetwork(replaceSsid)`. `WiFi.persistent
   (false)`: the list is the only store (a pre-existing core-saved network is migrated
-  once, then the core slot is wiped). `resetCredentials()` clears the list. List and
+  once, then the core slot is wiped). `resetCredentials()` clears the list. In the
+  `Portal` state it rescans every `WIFI_PORTAL_RESCAN_MS` (async, portal stays up) and
+  leaves for a saved network in range; skipped while a station is on the AP or there
+  are no candidates. The first rescan waits `WIFI_PORTAL_GRACE_MS` for a
+  button-requested portal or after a failed connect. Scan results are not `scanDelete()`d
+  there: WiFiManager's page reads the same core scan store. Leaving calls
+  `stopConfigPortal()`, which blocks ~1 s inside WiFiManager (accepted, once). List and
   session access is **mutex-guarded** (web handlers vs `loop()`). The `WiFiManager`
   instance is file-local to the .cpp: its headers define `HTTP_GET`/`HTTP_POST`,
   which clash with ESPAsyncWebServer's, so never include `WiFiManager.h` from a header.

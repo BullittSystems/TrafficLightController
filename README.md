@@ -108,10 +108,17 @@ after losing its connection) it scans and joins the strongest saved network in
 range. Joining a network never reorders or rewrites the list; it only changes when
 you edit it.
 
-If none are in range, the `TrafficLight-Setup` portal opens. A network entered
-there is appended to the list. If the list is already full, nothing is evicted:
-the new network is used as a **temporary** network until reboot, and the web UI (or
-`POST /api/wifi/keep`) lets you save it, replacing one you pick.
+If none are in range, the `TrafficLight-Setup` portal opens. While it is up, the
+device rescans every 60 s and leaves the portal on its own once a saved network is
+back in range, so losing Wi-Fi while powered (moving between sites, a router reboot)
+recovers without a power cycle. It never rescans while a phone is connected to the
+portal. After a saved network fails to connect, and when the portal was opened with
+the BOOT button, the first rescan waits 5 minutes instead.
+
+A network entered in the portal is appended to the list. If the list is already
+full, nothing is evicted: the new network is used as a **temporary** network until
+reboot, and the web UI (or `POST /api/wifi/keep`) lets you save it, replacing one
+you pick.
 
 ### Changing networks / resetting Wi-Fi
 
@@ -120,7 +127,8 @@ the new network is used as a **temporary** network until reboot, and the web UI 
 - **BOOT button**, held *while running* (holding it through reset enters the ROM
   bootloader instead):
   - **~5 s**: the lamps turn solid yellow. Release to restart into the portal with
-    the saved networks kept, e.g. to add one at a new site.
+    the saved networks kept, e.g. to add one at a new site. The portal stays up for
+    at least 5 minutes before it goes back to a saved network in range.
   - **~15 s** (keep holding): all lamps flash, every saved network is forgotten,
     and the device restarts into the portal.
 
