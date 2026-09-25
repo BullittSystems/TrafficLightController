@@ -55,12 +55,27 @@ The GPIO assignments live in [include/config.h](include/config.h) too
   --agree-to-license`). The ESP toolchain for this platform is x86_64-only; see
   [CLAUDE.md](CLAUDE.md) for details.
 
+### Supported boards
+
+Two targets, selected by PlatformIO environment:
+
+| Board | Env | Notes |
+|-------|-----|-------|
+| Teyleten ESP32-C3 SuperMini | `esp32-c3-supermini` (default) | Tiny; native USB. Weak antenna on some units. |
+| AITRIP/LOLIN D1 Mini ESP32 (ESP-WROOM-32) | `esp32-d1-mini` | Larger; stronger, more reliable Wi-Fi; CP2104 UART. |
+
+GPIO assignments and the BOOT/reset button differ per board and are selected
+automatically from the env's `TLC_BOARD_*` flag (see [include/config.h](include/config.h)):
+C3 uses lamps on GPIO3/4/5 and BOOT on GPIO9; the WROOM-32 uses GPIO22/21/17 and
+BOOT on GPIO0.
+
 ### Build and flash
 
 ```sh
-pio run                 # build firmware (default env: esp32-c3-supermini)
-pio run -t upload       # flash over USB
-pio device monitor      # serial console at 115200
+pio run                             # build default board (esp32-c3-supermini)
+pio run -e esp32-d1-mini            # build the WROOM-32 board
+pio run -e esp32-d1-mini -t upload  # flash it over USB
+pio device monitor                  # serial console at 115200
 ```
 
 ### First boot: Wi-Fi setup

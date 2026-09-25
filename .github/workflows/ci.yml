@@ -43,8 +43,8 @@ jobs:
           pip install platformio
 
       # Runs on x86_64 Linux, where the stock ESP toolchain is native (no Rosetta).
-      - name: Build firmware
-        run: pio run -e esp32-c3-supermini
+      - name: Build firmware (both boards)
+        run: pio run -e esp32-c3-supermini -e esp32-d1-mini
 
       - name: Run unit tests
         run: pio test -e native

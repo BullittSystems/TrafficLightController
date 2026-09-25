@@ -27,19 +27,31 @@
 #include <stdint.h>
 
 // Central hardware/firmware configuration.
-// GPIO assignments resolve the "TBD" in docs/traffic-light-controller-hardware.md.
-// These pins are boot-safe on the ESP32-C3 SuperMini: they avoid the BOOT/strap
-// pins (GPIO2/8/9), the native USB pins (GPIO18/19), and UART0 (GPIO20/21).
 
 // The three lamp channels. Values are stable (persisted and used as bit indices).
 enum class Lamp : uint8_t { Red, Yellow, Green };
 
 // One GPIO output per lamp channel. These are logic-level outputs; the driver
 // electronics behind them (MOSFET, relay, LED driver, ...) are the integrator's
-// choice and immaterial to the firmware.
-static constexpr int RED_GPIO    = 3;
-static constexpr int YELLOW_GPIO = 4;
-static constexpr int GREEN_GPIO  = 5;
+// choice and immaterial to the firmware. Pins are board-specific (selected by the
+// TLC_BOARD_* build flag from platformio.ini), chosen to avoid each chip's
+// strapping / USB / UART / flash pins.
+#if defined(TLC_BOARD_ESP32)
+// AITRIP/LOLIN D1 Mini ESP32 (ESP-WROOM-32). GPIO22/21/17 are three consecutive
+// pins in the inner-left header column (GND is two rows below them); all are safe
+// outputs. BOOT button is on GPIO0. (Avoid 0/2/12/15 strap, 1/3 UART0, 6-11 flash,
+// 34-39 input-only.)
+static constexpr int RED_GPIO          = 22;
+static constexpr int YELLOW_GPIO       = 21;
+static constexpr int GREEN_GPIO        = 17;
+static constexpr int RESET_BUTTON_GPIO = 0;
+#else  // TLC_BOARD_C3 (default): Teyleten ESP32-C3 SuperMini
+// GPIO3/4/5 are safe; BOOT button on GPIO9. (Avoid 2/8/9 strap, 18/19 USB, 20/21 UART0.)
+static constexpr int RED_GPIO          = 3;
+static constexpr int YELLOW_GPIO       = 4;
+static constexpr int GREEN_GPIO        = 5;
+static constexpr int RESET_BUTTON_GPIO = 9;
+#endif
 
 // Output polarity. true: a HIGH pin turns its lamp on (default). false: a LOW pin
 // turns it on (active-low drivers, e.g. many relay boards). This is a wiring fact
@@ -53,10 +65,10 @@ static constexpr char AP_SSID[] = "TrafficLight-Setup";
 // and opening the provisioning portal. The attempt is non-blocking either way.
 static constexpr uint32_t WIFI_STA_CONNECT_TIMEOUT_MS = 15000;
 
-// BOOT button. Held for WIFI_RESET_HOLD_MS while the firmware is running, it clears
-// saved Wi-Fi credentials and restarts into the provisioning portal. (Must be held
-// after boot, not through reset: GPIO9 low at reset enters the ROM bootloader.)
-static constexpr int RESET_BUTTON_GPIO       = 9;
+// Hold the BOOT button (RESET_BUTTON_GPIO, set per board above) for this long while
+// the firmware is running to clear saved Wi-Fi credentials and restart into the
+// provisioning portal. Must be held after boot, not through reset (the BOOT pin low
+// at reset enters the ROM bootloader).
 static constexpr uint32_t WIFI_RESET_HOLD_MS = 5000;
 
 // Serial monitor baud (matches platformio.ini monitor_speed).

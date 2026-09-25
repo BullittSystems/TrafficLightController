@@ -19,10 +19,16 @@ MOSFETs) is documented in
 
 PlatformIO. On this dev machine `pio` is at `~/.platformio/penv/bin/pio` (not on PATH).
 
-- Build firmware: `pio run` (default env `esp32-c3-supermini`)
-- Flash: `pio run -t upload`
+Two firmware envs share `[common]` in platformio.ini and select GPIOs/reset-button
+via a `TLC_BOARD_*` build flag consumed in `config.h`:
+- `esp32-c3-supermini` (default, `-DTLC_BOARD_C3`): lamps GPIO3/4/5, BOOT GPIO9, native USB CDC.
+- `esp32-d1-mini` (`-DTLC_BOARD_ESP32`): LOLIN/AITRIP D1 Mini ESP32 (WROOM-32), lamps
+  GPIO22/21/17, BOOT GPIO0, CP2104 UART. Stronger Wi-Fi than the C3 SuperMini.
+
+- Build: `pio run` (default C3) or `pio run -e esp32-d1-mini`
+- Flash: `pio run -e <env> -t upload`
 - Serial monitor: `pio device monitor` (115200)
-- Unit tests (host): `pio test -e native`
+- Unit tests (host): `pio test -e native` (board-agnostic; builds with the C3 default pins)
 
 ### Toolchain gotcha (Apple Silicon)
 

@@ -32,5 +32,8 @@ Initial firmware for the ESP32-C3 traffic light controller.
 - **Persistence**: all settings stored in NVS with validity guards on load.
 - **Tests**: host-native GoogleTest suite covering LampController, StepMode,
   RandomMode, ModeController, Settings, and SettingsCodec.
-- **CI**: GitHub Actions building the firmware, running unit tests, and enforcing
-  clang-format.
+- **Dual board support**: builds for both the ESP32-C3 SuperMini (`esp32-c3-supermini`)
+  and the D1 Mini ESP32 / ESP-WROOM-32 (`esp32-d1-mini`); GPIOs and the reset button
+  are selected per board via a build flag.
+- **CI**: GitHub Actions building both firmware targets, running unit tests, and
+  enforcing clang-format.
