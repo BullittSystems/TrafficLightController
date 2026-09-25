@@ -56,6 +56,12 @@ class WifiProvisioner {
     // so provisioning opens.
     void resetCredentials();
 
+    // Make the next boot open the portal instead of connecting, keeping the saved
+    // list. Survives a software restart only (RTC memory, no flash write). The
+    // caller restarts: the portal can't open in place while the web server holds
+    // port 80.
+    static void requestPortalOnBoot();
+
     // Saved list, session network, and current connection, without passwords.
     WifiSnapshot snapshot() const;
 

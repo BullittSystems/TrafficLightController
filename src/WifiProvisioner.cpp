@@ -26,6 +26,7 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WiFiManager.h>
+#include <esp_attr.h>
 #include <string.h>
 
 #include "config.h"
@@ -34,6 +35,11 @@ namespace {
 // File-local so WiFiManager's headers (which pull in the core WebServer's HTTP_*
 // enum) never reach code that also includes ESPAsyncWebServer.
 WiFiManager wm;
+
+// Set by requestPortalOnBoot(). RTC_NOINIT survives a software restart but holds
+// garbage after power-on, hence a magic value rather than a bool.
+constexpr uint32_t PORTAL_ON_BOOT_MAGIC = 0x504F5254;  // "PORT"
+RTC_NOINIT_ATTR uint32_t portalOnBoot;
 
 void copySsid(char (&dst)[33], const char* src) {
     strncpy(dst, src, sizeof(dst) - 1);
@@ -44,6 +50,9 @@ void copySsid(char (&dst)[33], const char* src) {
 WifiProvisioner::WifiProvisioner() : mutex_(xSemaphoreCreateMutex()) {}
 
 void WifiProvisioner::begin() {
+    const bool portalRequested = portalOnBoot == PORTAL_ON_BOOT_MAGIC;
+    portalOnBoot               = 0;
+
     wm.setConfigPortalBlocking(false);
     wm.setConnectTimeout(WIFI_PORTAL_CONNECT_TIMEOUT_S);
     WiFi.mode(WIFI_STA);
@@ -69,7 +78,16 @@ void WifiProvisioner::begin() {
     // NVS slot every time we join a different network.
     WiFi.persistent(false);
 
-    startScanOrPortal();
+    if (portalRequested) {
+        Serial.println("WiFi: portal requested (saved networks kept)");
+        startPortal();
+    } else {
+        startScanOrPortal();
+    }
+}
+
+void WifiProvisioner::requestPortalOnBoot() {
+    portalOnBoot = PORTAL_ON_BOOT_MAGIC;
 }
 
 void WifiProvisioner::process() {

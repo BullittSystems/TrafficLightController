@@ -47,6 +47,11 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
   input, select { width: 8rem; padding: .3rem; font-variant-numeric: tabular-nums; }
   button { margin-top: .5rem; padding: .5rem 1rem; }
   .muted { color: #888; font-size: .85rem; }
+  h2 { font-size: 1.1rem; margin-top: 2rem; }
+  ul { list-style: none; padding: 0; margin: 0; }
+  li { display: flex; justify-content: space-between; align-items: center; padding: .3rem 0; }
+  li button { margin: 0; padding: .2rem .6rem; }
+  [hidden] { display: none !important; }
 </style>
 </head>
 <body>
@@ -109,6 +114,29 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
     <button type="submit">Save</button>
   </form>
   <p id="status" class="muted">&nbsp;</p>
+
+  <h2>Wi-Fi</h2>
+  <p id="wifiNow" class="muted">&nbsp;</p>
+  <fieldset>
+    <legend>Saved networks (<span id="netCount">0</span>/<span id="netMax">5</span>)</legend>
+    <ul id="nets"></ul>
+  </fieldset>
+  <fieldset id="session" hidden>
+    <legend>Temporary network (forgotten on reboot)</legend>
+    <p id="sessionSsid"></p>
+    <label id="replaceLabel">Replace <select id="replace"></select></label>
+    <button id="keep" type="button">Keep</button>
+  </fieldset>
+  <form id="addNet">
+    <fieldset>
+      <legend>Add network</legend>
+      <label>SSID <input name="ssid" maxlength="32" required></label>
+      <label>Password <input name="password" type="password" maxlength="64"></label>
+      <button type="submit">Add</button>
+    </fieldset>
+  </form>
+  <button id="wifiReset" type="button">Forget all networks and restart</button>
+  <p id="wifiStatus" class="muted">&nbsp;</p>
 <script>
   const f = document.getElementById('f');
   const statusEl = document.getElementById('status');
@@ -158,6 +186,63 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
     else { statusEl.textContent = 'Error saving.'; }
   });
   load();
+
+  // Wi-Fi. SSIDs come from nearby APs, so render them as text, never as HTML.
+  const $ = (id) => document.getElementById(id);
+  const wifiStatus = $('wifiStatus');
+  let wifi = null;
+  function forgetButton(ssid) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = 'Forget';
+    b.onclick = () => confirm(`Forget "${ssid}"?`) && wifiPost('/api/wifi/forget', { ssid });
+    return b;
+  }
+  function renderWifi(w) {
+    wifi = w;
+    $('wifiNow').textContent = w.connected ? `Connected to ${w.connected}` : 'Not connected';
+    $('netCount').textContent = w.networks.length;
+    $('netMax').textContent = w.max;
+    $('nets').replaceChildren(...w.networks.map((n) => {
+      const li = document.createElement('li');
+      const name = document.createElement('span');
+      name.textContent = n.ssid + (n.ssid === w.connected ? ' (connected)' : '');
+      li.append(name, forgetButton(n.ssid));
+      return li;
+    }));
+    $('session').hidden = !w.session;
+    if (w.session) {
+      $('sessionSsid').textContent = w.session;
+      $('replaceLabel').hidden = w.networks.length < w.max;
+      $('replace').replaceChildren(...w.networks.map((n) => new Option(n.ssid, n.ssid)));
+    }
+  }
+  async function wifiPost(path, body) {
+    const r = await fetch(path, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok && j.networks) renderWifi(j);
+    wifiStatus.textContent = r.ok ? 'Saved.' : (j.error || 'Error.');
+    return r.ok;
+  }
+  $('keep').onclick = () => {
+    const full = wifi.networks.length >= wifi.max;
+    wifiPost('/api/wifi/keep', full ? { replace: $('replace').value } : {});
+  };
+  $('addNet').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const a = e.target;
+    if (await wifiPost('/api/wifi/add', { ssid: a.ssid.value, password: a.password.value })) {
+      a.reset();
+    }
+  });
+  $('wifiReset').onclick = async () => {
+    if (!confirm('Forget every saved network and restart into the setup portal?')) return;
+    const r = await fetch('/api/wifi/reset', { method: 'POST' });
+    wifiStatus.textContent = r.ok ? 'Restarting into the TrafficLight-Setup portal...' : 'Error.';
+  };
+  fetch('/api/wifi').then((r) => r.json()).then(renderWifi);
 </script>
 </body>
 </html>)HTML";

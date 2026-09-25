@@ -64,25 +64,43 @@ static void resetWifiAndRestart() {
     ESP.restart();
 }
 
-// Resets Wi-Fi when the BOOT button is held for WIFI_RESET_HOLD_MS. Poll every
-// loop; the timer resets whenever the button is released.
-static void handleResetButton() {
+// Two-tier BOOT button, polled every loop (see WIFI_PORTAL_HOLD_MS). Once held past
+// the portal threshold the lamps show solid yellow; release then restarts into the
+// portal keeping the saved networks, and holding on to WIFI_RESET_HOLD_MS forgets
+// them all. Returns true while armed so loop() stops the modes from overwriting the
+// indicator.
+static bool handleWifiButton() {
     static uint32_t heldSinceMs = 0;
+    static bool armed           = false;
     const bool pressed          = digitalRead(RESET_BUTTON_GPIO) == LOW;
 
     if (!pressed) {
+        if (armed) {
+            Serial.println("Wi-Fi: restarting into the portal (saved networks kept)");
+            Serial.flush();
+            WifiProvisioner::requestPortalOnBoot();
+            ESP.restart();
+        }
         heldSinceMs = 0;
-        return;
+        return false;
     }
     if (heldSinceMs == 0) {
         heldSinceMs = millis();
-        return;
-    }
-    if (millis() - heldSinceMs < WIFI_RESET_HOLD_MS) {
-        return;
+        return false;
     }
 
-    resetWifiAndRestart();
+    const uint32_t heldMs = millis() - heldSinceMs;
+    if (heldMs >= WIFI_RESET_HOLD_MS) {
+        resetWifiAndRestart();
+    }
+    if (heldMs >= WIFI_PORTAL_HOLD_MS && !armed) {
+        armed = true;
+        lamps.set(Lamp::Red, false);
+        lamps.set(Lamp::Yellow, true);
+        lamps.set(Lamp::Green, false);
+        Serial.println("Wi-Fi button: release for portal, keep holding to forget all");
+    }
+    return armed;
 }
 
 void setup() {
@@ -92,7 +110,7 @@ void setup() {
     // covers everything after.
     lamps.begin();
 
-    // BOOT button as input for the Wi-Fi credential reset (held while running).
+    // BOOT button as input for the Wi-Fi portal/reset (held while running).
     pinMode(RESET_BUTTON_GPIO, INPUT_PULLUP);
 
     Serial.begin(SERIAL_BAUD);
@@ -117,9 +135,10 @@ void setup() {
 }
 
 void loop() {
-    controller.tick();
+    if (!handleWifiButton()) {
+        controller.tick();
+    }
     wifi.process();
-    handleResetButton();
     if (web.wifiResetRequested()) {
         resetWifiAndRestart();
     }

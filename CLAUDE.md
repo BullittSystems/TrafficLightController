@@ -53,6 +53,8 @@ Decoupled layers; lamp behavior never depends on the network.
   FreeRTOS mutex** because web handlers and `loop()` run on different tasks.
 - `Settings` — persists `AppSettings` to NVS (Preferences).
 - `SettingsCodec` — pure JSON parse/validate/serialize (no web-server dep, unit-tested).
+- `WifiCodec`: same idea for `/api/wifi` (shape checks only; content validated by
+  `KnownNetworks`). Never serializes passwords.
 - `WebInterface` — ESPAsyncWebServer on :80; thin handlers delegate to the codec.
 - `KnownNetworks` — up to 5 saved Wi-Fi networks in NVS namespace `tlwifi`, in
   stable insertion order. **Never reordered or auto-evicted**: connecting writes
@@ -64,9 +66,16 @@ Decoupled layers; lamp behavior never depends on the network.
   becomes a RAM-only **session network** (used until reboot, also a rescan
   candidate) that the user can persist via `keepSessionNetwork(replaceSsid)`. `WiFi.persistent
   (false)`: the list is the only store (a pre-existing core-saved network is migrated
-  once, then the core slot is wiped). `resetCredentials()` clears the list. `main` polls the BOOT button (GPIO9,
-  `RESET_BUTTON_GPIO`); holding it `WIFI_RESET_HOLD_MS` clears creds + restarts into
-  the portal (poll in `loop()`, not at boot — GPIO9 low at reset enters the bootloader).
+  once, then the core slot is wiped). `resetCredentials()` clears the list. List and
+  session access is **mutex-guarded** (web handlers vs `loop()`). The `WiFiManager`
+  instance is file-local to the .cpp: its headers define `HTTP_GET`/`HTTP_POST`,
+  which clash with ESPAsyncWebServer's, so never include `WiFiManager.h` from a header.
+- BOOT button (`RESET_BUTTON_GPIO`), two tiers, polled in `loop()` (not at boot: the
+  pin low at reset enters the bootloader). Held past `WIFI_PORTAL_HOLD_MS` the lamps
+  go solid yellow and the modes pause; release restarts into the portal with the
+  list kept (`requestPortalOnBoot()`, an RTC_NOINIT magic, no flash write). Held to
+  `WIFI_RESET_HOLD_MS` it forgets all and restarts. The portal can't open in place
+  once the web server owns :80, hence the restart.
 
 Boot flow (`main.cpp`): lamps LOW -> load settings -> `controller.apply()` (starts
 mode immediately) -> Wi-Fi in background -> web server once connected.
@@ -94,6 +103,9 @@ modes before it, and reordering shifts saved values).
 - `/api/state` (GET) — current mode + live `lit` + API state.
 - `/api/state` (POST JSON) and `/api/state/{off,solid/<c>,blink/<c>}` (GET|POST) —
   transient; **only in API mode** (409 otherwise). API idle = yellow blink.
+- `/api/wifi` (GET) lists saved SSIDs, the session network, and the connected SSID.
+  POST JSON `/api/wifi/{add,forget,keep}` edit the list (409 full, 404 unknown, 400
+  invalid). POST `/api/wifi/reset` returns 202; `loop()` then forgets all and restarts.
 
 Durations clamp to 100..600000 ms server-side.
 

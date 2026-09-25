@@ -27,6 +27,7 @@ but any driver meeting the pin contract works.
 - **Web UI** for selecting the mode and editing its settings.
 - **REST API** for automation, including webhook-friendly one-URL routes.
 - **Wi-Fi provisioning** via a captive portal on first boot; no hardcoded creds.
+- **Multiple networks:** up to 5 saved networks; the strongest one in range is joined.
 - **Persistent settings** — the selected mode and its parameters survive reboots.
 - Lamp behavior is fully independent of the network: it runs immediately on power-up.
 - **Driver-agnostic:** three logic-level outputs with configurable polarity.
@@ -87,19 +88,40 @@ device IP; the web UI is at `http://<device-ip>/`.
 
 Lamp sequencing runs the whole time, even before Wi-Fi is configured.
 
+### Saved networks
+
+The device keeps up to **5 networks**, in the order they were added. At boot (or
+after losing its connection) it scans and joins the strongest saved network in
+range. Joining a network never reorders or rewrites the list; it only changes when
+you edit it.
+
+If none are in range, the `TrafficLight-Setup` portal opens. A network entered
+there is appended to the list. If the list is already full, nothing is evicted:
+the new network is used as a **temporary** network until reboot, and the web UI (or
+`POST /api/wifi/keep`) lets you save it, replacing one you pick.
+
 ### Changing networks / resetting Wi-Fi
 
-To move the device to a different network, clear its saved credentials: with the
-firmware running, **hold the BOOT button for ~5 seconds**. All three lamps flash to
-acknowledge, then it restarts into the `TrafficLight-Setup` portal so you can pick a
-new network. (Hold it *while running*, not through reset — holding BOOT during reset
-just enters the ROM bootloader.)
+- **Add or forget** networks from the web UI's Wi-Fi section or the
+  [Wi-Fi API](#wi-fi-networks).
+- **BOOT button**, held *while running* (holding it through reset enters the ROM
+  bootloader instead):
+  - **~5 s**: the lamps turn solid yellow. Release to restart into the portal with
+    the saved networks kept, e.g. to add one at a new site.
+  - **~15 s** (keep holding): all lamps flash, every saved network is forgotten,
+    and the device restarts into the portal.
+
+The D1 Mini ESP32 has only a RST button. For the BOOT function, wire a momentary
+switch from **IO0 to GND** (the pin has an internal pullup).
 
 ## Web UI
 
 Browse to `http://<device-ip>/`. Pick a mode from the dropdown; the relevant
 settings appear (sequence durations, random bounds + single/multiple, solid color,
 blink color + interval). Save persists the change and applies it immediately.
+
+The Wi-Fi section lists the saved networks (forget any), shows a temporary network
+with a Keep option, adds networks, and can forget all networks and restart.
 
 ## REST API
 
@@ -165,6 +187,32 @@ A `GET /api/state` response:
 ```json
 { "mode": "api", "lit": "green",
   "state": { "state": "solid", "color": "green", "intervalMs": 500 } }
+```
+
+### Wi-Fi networks
+
+Passwords are write-only: no response ever includes one. POST routes take a JSON
+body (`Content-Type: application/json`).
+
+| Method | Path | Body | Description |
+|--------|------|------|-------------|
+| GET | `/api/wifi` | | Saved SSIDs, temporary (`session`) and `connected` SSID |
+| POST | `/api/wifi/add` | `{"ssid","password"?}` | Save a network (409 if full) |
+| POST | `/api/wifi/forget` | `{"ssid"}` | Remove a saved network (404 if unknown) |
+| POST | `/api/wifi/keep` | `{"replace"?}` | Save the temporary network; `replace` is required when full |
+| POST | `/api/wifi/reset` | | Forget all networks and restart into the portal (202) |
+
+```sh
+curl http://<device-ip>/api/wifi
+curl -X POST http://<device-ip>/api/wifi/add -H 'Content-Type: application/json' \
+  -d '{"ssid":"Work","password":"hunter22"}'
+curl -X POST http://<device-ip>/api/wifi/keep -H 'Content-Type: application/json' \
+  -d '{"replace":"OldCafe"}'
+```
+
+```json
+{ "networks": [{ "ssid": "Home" }, { "ssid": "Work" }],
+  "session": null, "connected": "Home", "max": 5 }
 ```
 
 ## Testing

@@ -71,11 +71,13 @@ static constexpr uint32_t WIFI_SCAN_TIMEOUT_MS = 10000;
 // Bounds the (blocking) connect WiFiManager performs when the portal form is saved.
 static constexpr unsigned long WIFI_PORTAL_CONNECT_TIMEOUT_S = 10;
 
-// Hold the BOOT button (RESET_BUTTON_GPIO, set per board above) for this long while
-// the firmware is running to clear saved Wi-Fi credentials and restart into the
-// provisioning portal. Must be held after boot, not through reset (the BOOT pin low
-// at reset enters the ROM bootloader).
-static constexpr uint32_t WIFI_RESET_HOLD_MS = 5000;
+// Two-tier BOOT button (RESET_BUTTON_GPIO, set per board above), held while the
+// firmware is running. Past WIFI_PORTAL_HOLD_MS the lamps show solid yellow; releasing
+// then restarts into the provisioning portal with the saved networks kept. Holding
+// on to WIFI_RESET_HOLD_MS forgets every network instead. Must be held after boot,
+// not through reset (the BOOT pin low at reset enters the ROM bootloader).
+static constexpr uint32_t WIFI_PORTAL_HOLD_MS = 5000;
+static constexpr uint32_t WIFI_RESET_HOLD_MS  = 15000;
 
 // Serial monitor baud (matches platformio.ini monitor_speed).
 static constexpr unsigned long SERIAL_BAUD = 115200;
