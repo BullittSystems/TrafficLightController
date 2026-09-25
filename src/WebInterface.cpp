@@ -59,7 +59,6 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
   <form id="f">
     <label>Mode
       <select name="mode">
-        <option value="api">API</option>
         <option value="solid">Solid</option>
         <option value="blink">Blink</option>
         <option value="sequence">Sequence</option>
@@ -68,7 +67,6 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
         <option value="off">Off</option>
       </select>
     </label>
-    <p id="api" class="muted" hidden>Lamps are driven by POST /api/state while in this mode.</p>
     <fieldset id="solid">
       <legend>Solid</legend>
       <label>Color
@@ -114,6 +112,8 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
     <button type="submit">Save</button>
   </form>
   <p id="status" class="muted">&nbsp;</p>
+  <p id="ovr" class="muted" hidden>Override: <span id="ovrText"></span>
+    <button id="ovrClear" type="button">Clear</button></p>
 
   <h2>Wi-Fi</h2>
   <p id="wifiNow" class="muted">&nbsp;</p>
@@ -141,7 +141,6 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
   const f = document.getElementById('f');
   const statusEl = document.getElementById('status');
   const fs = {
-    api: document.getElementById('api'),
     solid: document.getElementById('solid'),
     blink: document.getElementById('blink'),
     sequence: document.getElementById('seq'),
@@ -182,7 +181,7 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
     const r = await fetch('/api/settings', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
     });
-    if (r.ok) { fill(await r.json()); statusEl.textContent = 'Saved.'; }
+    if (r.ok) { fill(await r.json()); statusEl.textContent = 'Saved.'; loadState(); }
     else { statusEl.textContent = 'Error saving.'; }
   });
   load();
@@ -243,6 +242,21 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
     wifiStatus.textContent = r.ok ? 'Restarting into the TrafficLight-Setup portal...' : 'Error.';
   };
   fetch('/api/wifi').then((r) => r.json()).then(renderWifi);
+
+  // Override: a transient pattern over the mode, set via /api/override.
+  async function loadState() {
+    const o = (await (await fetch('/api/state')).json()).override;
+    $('ovr').hidden = !o;
+    if (!o) return;
+    let text = o.pattern + (o.color ? ` ${o.color}` : '');
+    if (o.remainingMs !== undefined) text += ` (${Math.ceil(o.remainingMs / 1000)} s left)`;
+    $('ovrText').textContent = text;
+  }
+  $('ovrClear').onclick = async () => {
+    await fetch('/api/override/clear', { method: 'POST' });
+    loadState();
+  };
+  loadState();
 </script>
 </body>
 </html>)HTML";
@@ -254,10 +268,10 @@ WebInterface::WebInterface(Settings& settings, ModeController& controller, WifiP
                            [this](AsyncWebServerRequest* request, JsonVariant& json) {
                                handlePostSettings(request, json);
                            }),
-      statePostHandler_("/api/state",
-                        [this](AsyncWebServerRequest* request, JsonVariant& json) {
-                            handlePostState(request, json);
-                        }),
+      overridePostHandler_("/api/override",
+                           [this](AsyncWebServerRequest* request, JsonVariant& json) {
+                               handlePostOverride(request, json);
+                           }),
       wifiAddHandler_("/api/wifi/add",
                       [this](AsyncWebServerRequest* request, JsonVariant& json) {
                           handlePostWifiAdd(request, json);
@@ -288,68 +302,38 @@ void WebInterface::registerRoutes() {
         request->send(200, "text/html", INDEX_HTML);
     });
 
-    // Specific path routes MUST be registered before the generic /api/state and
-    // /api/settings GET routes below: the server matches by prefix in registration
-    // order, so a generic "/api/state" would otherwise shadow "/api/state/...".
+    // Generic routes below are prefix-style ("/api/wifi" also matches "/api/wifi/x"),
+    // so specific routes MUST be registered first; e.g. the JSON POST /api/override
+    // handler would otherwise catch "/api/override/...". The pattern routes use
+    // exact matching, so "/api/mode/blink/red" is a 404, not blink.
 
-    // Webhook-friendly convenience routes (GET or POST, no body). Blink uses the
-    // current/last API interval.
-    struct StateRoute {
-        const char* path;
-        ApiStateKind kind;
-        Lamp color;
-    };
-    static const StateRoute routes[] = {
-        {"/api/state/off", ApiStateKind::Off, Lamp::Red},
-        {"/api/state/solid/red", ApiStateKind::Solid, Lamp::Red},
-        {"/api/state/solid/yellow", ApiStateKind::Solid, Lamp::Yellow},
-        {"/api/state/solid/green", ApiStateKind::Solid, Lamp::Green},
-        {"/api/state/blink/red", ApiStateKind::Blink, Lamp::Red},
-        {"/api/state/blink/yellow", ApiStateKind::Blink, Lamp::Yellow},
-        {"/api/state/blink/green", ApiStateKind::Blink, Lamp::Green},
-    };
-    for (const StateRoute& r : routes) {
-        server_.on(r.path, HTTP_GET | HTTP_POST, [this, r](AsyncWebServerRequest* request) {
-            logRequest(request);
-            ApiState state;
-            state.kind       = r.kind;
-            state.color      = r.color;
-            state.intervalMs = controller_.apiState().intervalMs;
-            applyApiCommand(request, state);
-        });
+    // Webhook-friendly one-URL routes (GET or POST, no body): the path names the
+    // pattern, the query carries its parameters (?color=red&intervalMs=200). Served
+    // under both /api/mode (persisted) and /api/override (transient, plus ttlMs).
+    static const Mode patterns[] = {Mode::Solid,  Mode::Blink, Mode::Sequence,
+                                    Mode::Random, Mode::Chase, Mode::Off};
+    for (const Mode pattern : patterns) {
+        const char* name = SettingsCodec::modeName(pattern);
+        server_.on(AsyncURIMatcher::exact(String("/api/mode/") + name), HTTP_GET | HTTP_POST,
+                   [this, pattern](AsyncWebServerRequest* request) {
+                       logRequest(request);
+                       applyModeRoute(request, pattern);
+                   });
+        server_.on(AsyncURIMatcher::exact(String("/api/override/") + name), HTTP_GET | HTTP_POST,
+                   [this, pattern](AsyncWebServerRequest* request) {
+                       logRequest(request);
+                       applyOverrideRoute(request, pattern);
+                   });
     }
 
-    // Random variant convenience routes (persisted). MUST be registered before the
-    // generic /api/mode/random below, which prefix-matches these.
-    server_.on("/api/mode/random/single", HTTP_GET | HTTP_POST,
-               [this](AsyncWebServerRequest* request) {
-                   logRequest(request);
-                   applyRandomVariant(request, RandomVariant::Single);
-               });
-    server_.on("/api/mode/random/multi", HTTP_GET | HTTP_POST,
-               [this](AsyncWebServerRequest* request) {
-                   logRequest(request);
-                   applyRandomVariant(request, RandomVariant::Multi);
-               });
-
-    // Webhook-friendly persisted mode switches (GET or POST). Each activates the
-    // mode using its already-saved parameters.
-    struct ModeRoute {
-        const char* path;
-        Mode mode;
+    // Back to the mode: a one-URL route, plus DELETE on the collection.
+    const auto clear = [this](AsyncWebServerRequest* request) {
+        logRequest(request);
+        controller_.clearOverride();
+        handleGetState(request);
     };
-    static const ModeRoute modeRoutes[] = {
-        {"/api/mode/api", Mode::Api},       {"/api/mode/solid", Mode::Solid},
-        {"/api/mode/blink", Mode::Blink},   {"/api/mode/sequence", Mode::Sequence},
-        {"/api/mode/random", Mode::Random}, {"/api/mode/chase", Mode::Chase},
-        {"/api/mode/off", Mode::Off},
-    };
-    for (const ModeRoute& r : modeRoutes) {
-        server_.on(r.path, HTTP_GET | HTTP_POST, [this, r](AsyncWebServerRequest* request) {
-            logRequest(request);
-            applyModeChange(request, r.mode);
-        });
-    }
+    server_.on(AsyncURIMatcher::exact("/api/override/clear"), HTTP_GET | HTTP_POST, clear);
+    server_.on(AsyncURIMatcher::exact("/api/override"), HTTP_DELETE, clear);
 
     // Wi-Fi network management. The /api/wifi/... routes MUST precede the generic
     // GET /api/wifi. Reset is POST-only so a browser prefetch can never trigger it.
@@ -381,8 +365,8 @@ void WebInterface::registerRoutes() {
 
     settingsPostHandler_.setMethod(HTTP_POST);
     server_.addHandler(&settingsPostHandler_);
-    statePostHandler_.setMethod(HTTP_POST);
-    server_.addHandler(&statePostHandler_);
+    overridePostHandler_.setMethod(HTTP_POST);
+    server_.addHandler(&overridePostHandler_);
 }
 
 void WebInterface::handleGetSettings(AsyncWebServerRequest* request) {
@@ -411,8 +395,9 @@ void WebInterface::handlePostSettings(AsyncWebServerRequest* request, JsonVarian
         return;
     }
 
+    // Any request that sets the mode (including the web UI's Save) drops an override.
     settings_.save(app);
-    controller_.apply(app);
+    controller_.apply(app, /*clearOverride=*/!json["mode"].isNull());
 
     JsonDocument doc;
     SettingsCodec::writeSettings(doc, controller_.settings());
@@ -423,41 +408,29 @@ void WebInterface::handlePostSettings(AsyncWebServerRequest* request, JsonVarian
 
 void WebInterface::handleGetState(AsyncWebServerRequest* request) {
     JsonDocument doc;
-    SettingsCodec::writeState(doc, controller_.settings().mode, controller_.currentMask(),
-                              controller_.inApiMode(), controller_.apiState());
+    SettingsCodec::writeState(doc, controller_.status());
 
     String body;
     serializeJson(doc, body);
     request->send(200, "application/json", body);
 }
 
-void WebInterface::handlePostState(AsyncWebServerRequest* request, JsonVariant& json) {
+void WebInterface::handlePostOverride(AsyncWebServerRequest* request, JsonVariant& json) {
     logRequest(request);
     if (!json.is<JsonObject>()) {
-        request->send(400, "application/json", "{\"error\":\"expected JSON object\"}");
+        sendError(request, 400, "expected JSON object");
         return;
     }
 
-    ApiState state;
-    state.intervalMs = controller_.apiState().intervalMs;  // default to current
+    Override ov;
     const SettingsCodec::Result parse =
-        SettingsCodec::parseApiCommand(json.as<JsonObjectConst>(), state);
+        SettingsCodec::parseOverride(json.as<JsonObjectConst>(), controller_.settings(), ov);
     if (!parse.ok) {
-        String err = String("{\"error\":\"") + parse.error + "\"}";
-        request->send(400, "application/json", err);
+        sendError(request, 400, parse.error);
         return;
     }
-
-    applyApiCommand(request, state);
-}
-
-void WebInterface::applyApiCommand(AsyncWebServerRequest* request, const ApiState& state) {
-    if (!controller_.applyApiState(state)) {
-        Serial.println("HTTP: /api/state rejected (not in API mode)");
-        request->send(409, "application/json", "{\"error\":\"not in API mode\"}");
-        return;
-    }
-    handleGetState(request);  // report the resulting state
+    controller_.setOverride(ov);
+    handleGetState(request);
 }
 
 void WebInterface::logRequest(AsyncWebServerRequest* request) {
@@ -465,20 +438,53 @@ void WebInterface::logRequest(AsyncWebServerRequest* request) {
                   request->client()->remoteIP().toString().c_str());
 }
 
-void WebInterface::applyModeChange(AsyncWebServerRequest* request, Mode mode) {
-    AppSettings app = controller_.settings();
-    app.mode        = mode;
+bool WebInterface::queryCommand(AsyncWebServerRequest* request, Mode pattern, JsonDocument& doc) {
+    JsonObject obj = doc.to<JsonObject>();
+    for (size_t i = 0; i < request->params(); i++) {
+        const AsyncWebParameter* p = request->getParam(i);
+        if (p->isPost() || p->isFile()) {
+            continue;  // one-URL routes take no body
+        }
+        if (p->name() == "pattern") {
+            sendError(request, 400, "the pattern comes from the path");
+            return false;
+        }
+        SettingsCodec::putQueryParam(obj, p->name().c_str(), p->value().c_str());
+    }
+    obj["pattern"] = SettingsCodec::modeName(pattern);
+    return true;
+}
+
+void WebInterface::applyModeRoute(AsyncWebServerRequest* request, Mode pattern) {
+    JsonDocument doc;
+    if (!queryCommand(request, pattern, doc)) {
+        return;
+    }
+    AppSettings app;
+    const SettingsCodec::Result parse =
+        SettingsCodec::parseModeCommand(doc.as<JsonObjectConst>(), controller_.settings(), app);
+    if (!parse.ok) {
+        sendError(request, 400, parse.error);
+        return;
+    }
     settings_.save(app);
-    controller_.apply(app);
+    controller_.apply(app, /*clearOverride=*/true);
     handleGetState(request);  // report the resulting state
 }
 
-void WebInterface::applyRandomVariant(AsyncWebServerRequest* request, RandomVariant variant) {
-    AppSettings app    = controller_.settings();
-    app.mode           = Mode::Random;
-    app.random.variant = variant;
-    settings_.save(app);
-    controller_.apply(app);
+void WebInterface::applyOverrideRoute(AsyncWebServerRequest* request, Mode pattern) {
+    JsonDocument doc;
+    if (!queryCommand(request, pattern, doc)) {
+        return;
+    }
+    Override ov;
+    const SettingsCodec::Result parse =
+        SettingsCodec::parseOverride(doc.as<JsonObjectConst>(), controller_.settings(), ov);
+    if (!parse.ok) {
+        sendError(request, 400, parse.error);
+        return;
+    }
+    controller_.setOverride(ov);
     handleGetState(request);  // report the resulting state
 }
 

@@ -1,7 +1,7 @@
 /*
  * test_modecontroller.cpp
  *
- * Native unit tests for ModeController (mode dispatch, API state gating, idle).
+ * Native unit tests for ModeController (mode dispatch, overrides and their expiry).
  */
 #include <gtest/gtest.h>
 
@@ -132,47 +132,6 @@ TEST_F(ModeControllerTest, ParamEditAppliesImmediatelyWithoutModeChange) {
     EXPECT_FALSE(greenOn());
 }
 
-TEST_F(ModeControllerTest, ApiModeIdleShowsYellowBlink) {
-    AppSettings s = base();
-    s.mode        = Mode::Api;
-    controller.apply(s);
-
-    // Idle = blink yellow: on-phase lit immediately.
-    EXPECT_TRUE(yellowOn());
-    EXPECT_FALSE(redOn());
-    EXPECT_FALSE(greenOn());
-
-    mock_advance_millis(DEFAULT_BLINK_MS);
-    controller.tick();
-    EXPECT_TRUE(allOff());  // off-phase
-}
-
-TEST_F(ModeControllerTest, ApiStateRejectedWhenNotInApiMode) {
-    AppSettings s = base();
-    s.mode        = Mode::Solid;
-    s.solid.color = Lamp::Green;
-    controller.apply(s);
-
-    ApiState cmd;
-    cmd.kind  = ApiStateKind::Solid;
-    cmd.color = Lamp::Red;
-    EXPECT_FALSE(controller.applyApiState(cmd));
-    EXPECT_TRUE(greenOn());  // unchanged
-}
-
-TEST_F(ModeControllerTest, ApiStateAppliedWhenInApiMode) {
-    AppSettings s = base();
-    s.mode        = Mode::Api;
-    controller.apply(s);
-
-    ApiState cmd;
-    cmd.kind  = ApiStateKind::Solid;
-    cmd.color = Lamp::Red;
-    EXPECT_TRUE(controller.applyApiState(cmd));
-    EXPECT_TRUE(redOn());
-    EXPECT_FALSE(yellowOn());
-}
-
 TEST_F(ModeControllerTest, CurrentMaskReflectsLitLamp) {
     AppSettings s = base();
     s.mode        = Mode::Solid;
@@ -209,26 +168,142 @@ TEST_F(ModeControllerTest, ModeChangeRestartsSequenceFromGreen) {
     EXPECT_FALSE(yellowOn());
 }
 
-TEST_F(ModeControllerTest, ReenteringApiResetsToIdle) {
-    AppSettings s = base();
-    s.mode        = Mode::Api;
-    controller.apply(s);
+namespace {
+Override solidOverride(const AppSettings& saved, Lamp color, uint32_t ttlMs = 0) {
+    Override ov;
+    ov.settings             = saved;
+    ov.settings.mode        = Mode::Solid;
+    ov.settings.solid.color = color;
+    ov.ttlMs                = ttlMs;
+    return ov;
+}
+}  // namespace
 
-    // Drive it to solid red via an API command.
-    ApiState cmd;
-    cmd.kind  = ApiStateKind::Solid;
-    cmd.color = Lamp::Red;
-    ASSERT_TRUE(controller.applyApiState(cmd));
+TEST_F(ModeControllerTest, OverrideCoversModeAndClearRestoresIt) {
+    AppSettings s = base();
+    s.mode        = Mode::Sequence;
+    controller.apply(s);
+    EXPECT_TRUE(greenOn());
+
+    controller.setOverride(solidOverride(s, Lamp::Red));
+    EXPECT_TRUE(redOn());
+    EXPECT_FALSE(greenOn());
+
+    // A solid override holds while the mode's timing would have advanced.
+    mock_advance_millis(s.sequence.greenMs);
+    controller.tick();
     EXPECT_TRUE(redOn());
 
-    // Switch away and back: API state must reset to the yellow-blink idle.
-    AppSettings off = base();
-    off.mode        = Mode::Off;
-    controller.apply(off);
+    EXPECT_TRUE(controller.clearOverride());
+    EXPECT_TRUE(greenOn());  // mode restarts from its first step
+    EXPECT_FALSE(redOn());
+    EXPECT_FALSE(controller.clearOverride());  // nothing left to clear
+}
+
+TEST_F(ModeControllerTest, OverrideWorksFromOffMode) {
+    AppSettings s = base();
+    s.mode        = Mode::Off;
+    controller.apply(s);
+    EXPECT_TRUE(allOff());
+
+    controller.setOverride(solidOverride(s, Lamp::Yellow));
+    EXPECT_TRUE(yellowOn());
+}
+
+TEST_F(ModeControllerTest, TimedOverrideExpiresBackToMode) {
+    AppSettings s = base();
+    s.mode        = Mode::Solid;
+    s.solid.color = Lamp::Green;
     controller.apply(s);
 
-    EXPECT_TRUE(yellowOn());
+    controller.setOverride(solidOverride(s, Lamp::Red, 5000));
+    mock_advance_millis(4999);
+    controller.tick();
+    EXPECT_TRUE(redOn());
+    EXPECT_EQ(controller.status().remainingMs, 1u);
+
+    mock_advance_millis(1);
+    controller.tick();
+    EXPECT_TRUE(greenOn());
     EXPECT_FALSE(redOn());
-    EXPECT_EQ(controller.apiState().kind, ApiStateKind::Blink);
-    EXPECT_EQ(controller.apiState().color, Lamp::Yellow);
+    EXPECT_FALSE(controller.status().overridden);
+}
+
+TEST_F(ModeControllerTest, TimedOverrideSurvivesMillisRollover) {
+    mock_set_millis(0xFFFFFF00u);
+    AppSettings s = base();
+    s.mode        = Mode::Off;
+    controller.apply(s);
+    controller.setOverride(solidOverride(s, Lamp::Red, 1000));
+
+    mock_advance_millis(0x200);  // wraps past zero; 512 ms elapsed
+    controller.tick();
+    EXPECT_TRUE(redOn());
+    mock_advance_millis(488);
+    controller.tick();
+    EXPECT_TRUE(allOff());
+}
+
+TEST_F(ModeControllerTest, SettingModeClearsOverride) {
+    AppSettings s = base();
+    s.mode        = Mode::Solid;
+    s.solid.color = Lamp::Green;
+    controller.apply(s);
+    controller.setOverride(solidOverride(s, Lamp::Red));
+
+    s.mode = Mode::Chase;
+    controller.apply(s, /*clearOverride=*/true);
+    EXPECT_FALSE(controller.status().overridden);
+    EXPECT_TRUE(redOn());  // chase starts on red
+    EXPECT_FALSE(greenOn());
+}
+
+TEST_F(ModeControllerTest, SettingsWithoutModeKeepOverride) {
+    AppSettings s = base();
+    s.mode        = Mode::Solid;
+    s.solid.color = Lamp::Green;
+    controller.apply(s);
+    controller.setOverride(solidOverride(s, Lamp::Red));
+
+    // A parameter-only save updates the baseline but leaves the override showing.
+    s.solid.color = Lamp::Yellow;
+    controller.apply(s);
+    EXPECT_TRUE(redOn());
+    EXPECT_TRUE(controller.status().overridden);
+
+    controller.clearOverride();
+    EXPECT_TRUE(yellowOn());  // new baseline shows once the override ends
+}
+
+TEST_F(ModeControllerTest, RandomOverrideOverStepMode) {
+    AppSettings s = base();
+    s.mode        = Mode::Off;
+    controller.apply(s);
+
+    Override ov;
+    ov.settings      = s;
+    ov.settings.mode = Mode::Random;
+    controller.setOverride(ov);
+    EXPECT_NE(controller.currentMask(), 0);  // random single lights one lamp
+    EXPECT_FALSE(allOff());
+
+    controller.clearOverride();
+    EXPECT_TRUE(allOff());
+    EXPECT_EQ(controller.currentMask(), 0);
+}
+
+TEST_F(ModeControllerTest, StatusReportsModeAndOverride) {
+    AppSettings s = base();
+    s.mode        = Mode::Chase;
+    controller.apply(s);
+    EXPECT_EQ(controller.status().mode, Mode::Chase);
+    EXPECT_FALSE(controller.status().overridden);
+
+    controller.setOverride(solidOverride(s, Lamp::Green));
+    const LiveStatus st = controller.status();
+    EXPECT_EQ(st.mode, Mode::Chase);
+    EXPECT_TRUE(st.overridden);
+    EXPECT_EQ(st.active.settings.mode, Mode::Solid);
+    EXPECT_EQ(st.litMask, lampBit(Lamp::Green));
+    EXPECT_EQ(st.remainingMs, 0u);  // untimed
 }

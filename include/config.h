@@ -99,11 +99,14 @@ struct PhaseDurations {
     uint32_t redMs    = DEFAULT_RED_MS;
 };
 
-// Operating mode selected at runtime and persisted.
+// Operating mode selected at runtime and persisted. Also the pattern vocabulary for
+// transient overrides (see Override).
 // NOTE: the numeric values are what get persisted, so reordering changes what a
-// previously-saved mode reads back as. Keep Off last so it bounds the valid range;
-// insert new modes before it (and update the range guard in Settings::load).
-enum class Mode : uint8_t { Api, Solid, Blink, Sequence, Random, Chase, Off };
+// previously-saved mode reads back as. Append new modes at the end and move
+// MODE_LAST to match (it bounds the range guard in Settings::load). User-facing
+// lists (UI, routes, docs) still show Off last.
+enum class Mode : uint8_t { Off, Solid, Blink, Sequence, Random, Chase };
+static constexpr Mode MODE_LAST = Mode::Chase;
 
 // Default random-mode hold-time bounds (ms).
 static constexpr uint32_t DEFAULT_RANDOM_MIN_MS = 1000;
@@ -150,11 +153,19 @@ struct AppSettings {
     ChaseSettings chase;
 };
 
-// Transient API-mode state (not persisted). Set via /api/state while in Api mode;
-// resets to Off when entering Api mode and after reboot.
-enum class ApiStateKind : uint8_t { Off, Solid, Blink };
-struct ApiState {
-    ApiStateKind kind   = ApiStateKind::Off;
-    Lamp color          = Lamp::Red;
-    uint32_t intervalMs = DEFAULT_BLINK_MS;
+// Transient pattern layered over the persisted mode; never persisted. settings.mode
+// is the pattern, and only that pattern's parameters apply. It starts from the saved
+// settings, so omitted parameters use the saved values.
+struct Override {
+    AppSettings settings;
+    uint32_t ttlMs = 0;  // 0: until cleared, the mode is set, or reboot
+};
+
+// Snapshot of what the light is doing, for GET /api/state.
+struct LiveStatus {
+    Mode mode       = Mode::Off;  // persisted baseline
+    uint8_t litMask = 0;
+    bool overridden = false;
+    Override active;           // valid when overridden
+    uint32_t remainingMs = 0;  // valid when overridden with a ttl
 };

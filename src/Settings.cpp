@@ -77,9 +77,8 @@ AppSettings Settings::load() {
     s.chase.intervalMs = prefs.getULong(KEY_CHASE_MS, s.chase.intervalMs);
     prefs.end();
 
-    // Guard against a corrupt/out-of-range persisted mode value (Off is the last
-    // enumerator, so it bounds the valid range).
-    if (static_cast<uint8_t>(s.mode) > static_cast<uint8_t>(Mode::Off)) {
+    // Guard against a corrupt/out-of-range persisted mode value.
+    if (static_cast<uint8_t>(s.mode) > static_cast<uint8_t>(MODE_LAST)) {
         s.mode = Mode::Sequence;
     }
     return s;

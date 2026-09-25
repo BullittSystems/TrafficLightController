@@ -60,11 +60,15 @@ TEST_F(SettingsTest, RoundTripsAllFields) {
     EXPECT_EQ(in.chase.intervalMs, 175u);
 }
 
-TEST_F(SettingsTest, ApiModePersists) {
+TEST_F(SettingsTest, OffAndLastModePersist) {
     AppSettings out;
-    out.mode = Mode::Api;
+    out.mode = Mode::Off;
     settings.save(out);
-    EXPECT_EQ(settings.load().mode, Mode::Api);
+    EXPECT_EQ(settings.load().mode, Mode::Off);
+
+    out.mode = MODE_LAST;
+    settings.save(out);
+    EXPECT_EQ(settings.load().mode, MODE_LAST);
 }
 
 TEST_F(SettingsTest, OutOfRangeModeCoercedToSequence) {

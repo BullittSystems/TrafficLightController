@@ -30,46 +30,54 @@
 #include "StepMode.h"
 #include "config.h"
 
-// Owns the active operating mode. Table-based modes run on the shared StepMode
-// engine; Random runs on its own. Pushes settings into the active mode and
-// delegates the per-loop tick.
+// Owns what the lamps show: the persisted mode (the baseline), optionally covered by
+// a transient Override. Table-based patterns run on the shared StepMode engine;
+// Random runs on its own. Pushes settings into the active pattern and delegates the
+// per-loop tick.
 class ModeController {
   public:
     ModeController(StepMode& step, RandomMode& random);
 
-    // Apply settings: refresh each mode's parameters, and (re)start the selected
-    // mode when the mode changes. Parameter-only changes take effect on the next
-    // step without restarting the active mode.
-    void apply(const AppSettings& settings);
+    // Apply persisted settings. (Re)starts the mode when it changes; parameter-only
+    // changes take effect in place. clearOverride drops any active override (for
+    // requests that set the mode); otherwise an override keeps running and the new
+    // settings show once it ends.
+    void apply(const AppSettings& settings, bool clearOverride = false);
 
-    // Apply a transient API state. Returns false (caller responds 409) unless the
-    // current mode is Api. On success, drives the lamps immediately.
-    bool applyApiState(const ApiState& state);
+    // Show an override on top of the mode, starting it immediately.
+    void setOverride(const Override& override);
 
-    // Delegate to the active mode. Call every loop().
+    // Return to the mode, restarting it. False if there was no override.
+    bool clearOverride();
+
+    // Advance the active pattern and expire a timed override. Call every loop().
     void tick();
 
-    // The settings currently in effect.
+    // The persisted settings (the baseline).
     const AppSettings& settings() const { return settings_; }
 
-    // True when the API drives the lamps (mode == Api).
-    bool inApiMode() const { return settings_.mode == Mode::Api; }
+    // Mode, override, and lit lamps as one consistent snapshot.
+    LiveStatus status() const;
 
-    // The transient API state currently in effect (meaningful in Api mode).
-    const ApiState& apiState() const { return apiState_; }
-
-    // Lamp mask currently lit, across whichever mode is active.
+    // Lamp mask currently lit, across whichever pattern is active.
     uint8_t currentMask() const;
 
   private:
-    // Build the step table for the current mode and load it into the engine.
+    // The settings the lamps follow: the override's if one is active.
+    const AppSettings& active() const { return hasOverride_ ? override_.settings : settings_; }
+    // Push the active settings into the engines; restart or refresh in place.
+    void activate(bool restart);
+    // Build the step table for the active pattern and load it into the engine.
     void loadStepTable();
+    uint8_t currentMaskLocked() const;
 
     StepMode& step_;
     RandomMode& random_;
     AppSettings settings_;
-    ApiState apiState_;
-    bool started_ = false;
+    Override override_;
+    bool hasOverride_         = false;
+    uint32_t overrideStartMs_ = 0;
+    bool started_             = false;
     // Serializes state access between the web-server (AsyncTCP) task and the main
     // loop task; both call into the modes concurrently.
     SemaphoreHandle_t mutex_;

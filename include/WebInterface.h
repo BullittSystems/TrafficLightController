@@ -57,16 +57,18 @@ class WebInterface {
     void handleGetSettings(AsyncWebServerRequest* request);
     void handlePostSettings(AsyncWebServerRequest* request, JsonVariant& json);
 
-    // GET /api/state: report current mode, live lit lamp, and API state.
+    // GET /api/state: persisted mode, what is showing, and the override.
     void handleGetState(AsyncWebServerRequest* request);
-    // POST /api/state (JSON body): set the transient API state.
-    void handlePostState(AsyncWebServerRequest* request, JsonVariant& json);
-    // Apply an API command: 409 unless in API mode, otherwise apply and report state.
-    void applyApiCommand(AsyncWebServerRequest* request, const ApiState& state);
-    // Switch the top-level mode (persisted) and report the resulting state.
-    void applyModeChange(AsyncWebServerRequest* request, Mode mode);
-    // Switch to Random mode with a specific variant (persisted) and report state.
-    void applyRandomVariant(AsyncWebServerRequest* request, RandomVariant variant);
+    // POST /api/override (JSON body): show a transient pattern over the mode.
+    void handlePostOverride(AsyncWebServerRequest* request, JsonVariant& json);
+    // /api/mode/<pattern>?params: persist the pattern and params as the mode, and
+    // clear any override.
+    void applyModeRoute(AsyncWebServerRequest* request, Mode pattern);
+    // /api/override/<pattern>?params[&ttlMs=]: show the pattern transiently.
+    void applyOverrideRoute(AsyncWebServerRequest* request, Mode pattern);
+    // Build the parser input for a one-URL route: the query parameters plus the
+    // pattern from the path. False (400 sent) if the query tries to set the pattern.
+    bool queryCommand(AsyncWebServerRequest* request, Mode pattern, JsonDocument& doc);
     // Log an incoming API request (method, path, client IP) to the serial console.
     void logRequest(AsyncWebServerRequest* request);
 
@@ -79,7 +81,7 @@ class WebInterface {
 
     AsyncWebServer server_;
     AsyncCallbackJsonWebHandler settingsPostHandler_;
-    AsyncCallbackJsonWebHandler statePostHandler_;
+    AsyncCallbackJsonWebHandler overridePostHandler_;
     AsyncCallbackJsonWebHandler wifiAddHandler_;
     AsyncCallbackJsonWebHandler wifiForgetHandler_;
     AsyncCallbackJsonWebHandler wifiKeepHandler_;
