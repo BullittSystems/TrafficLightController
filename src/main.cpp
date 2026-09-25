@@ -31,6 +31,7 @@
 #include "ModeController.h"
 #include "RandomMode.h"
 #include "Settings.h"
+#include "SettingsCodec.h"
 #include "StepMode.h"
 #include "WebInterface.h"
 #include "WifiProvisioner.h"
@@ -97,7 +98,7 @@ void setup() {
 
     // Load persisted settings (defaults on first boot) and start the active mode.
     AppSettings app = settings.load();
-    Serial.printf("Mode: %s\n", app.mode == Mode::Random ? "random" : "sequence");
+    Serial.printf("Mode: %s\n", SettingsCodec::modeName(app.mode));
     Serial.printf("Sequence (ms): green=%lu yellow=%lu red=%lu\n",
                   (unsigned long) app.sequence.greenMs, (unsigned long) app.sequence.yellowMs,
                   (unsigned long) app.sequence.redMs);
