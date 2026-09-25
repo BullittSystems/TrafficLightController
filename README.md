@@ -1,5 +1,7 @@
 # Traffic Light Controller
 
+[![CI](https://github.com/BullittSystems/TrafficLightController/actions/workflows/ci.yml/badge.svg)](https://github.com/BullittSystems/TrafficLightController/actions/workflows/ci.yml)
+
 Firmware for a standard three-aspect **red / yellow / green** signal, running on an
 ESP32 (a **Teyleten Robot ESP32-C3 SuperMini** by default, or a **D1 Mini ESP32**;
 see [Supported boards](#supported-boards)). The device joins your Wi-Fi, serves a
