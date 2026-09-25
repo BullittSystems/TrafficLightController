@@ -46,8 +46,14 @@ static constexpr int GREEN_GPIO  = 5;
 // fixed per build, so it is compile-time config, not a runtime setting.
 static constexpr bool LAMP_ACTIVE_HIGH = true;
 
-// Wi-Fi provisioning access-point name (used in later tasks).
+// Wi-Fi provisioning access-point name.
 static constexpr char AP_SSID[] = "TrafficLight-Setup";
+
+// BOOT button. Held for WIFI_RESET_HOLD_MS while the firmware is running, it clears
+// saved Wi-Fi credentials and restarts into the provisioning portal. (Must be held
+// after boot, not through reset: GPIO9 low at reset enters the ROM bootloader.)
+static constexpr int RESET_BUTTON_GPIO       = 9;
+static constexpr uint32_t WIFI_RESET_HOLD_MS = 5000;
 
 // Serial monitor baud (matches platformio.ini monitor_speed).
 static constexpr unsigned long SERIAL_BAUD = 115200;

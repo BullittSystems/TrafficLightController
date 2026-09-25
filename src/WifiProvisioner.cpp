@@ -51,6 +51,10 @@ bool WifiProvisioner::isConnected() const {
     return WiFi.status() == WL_CONNECTED;
 }
 
+void WifiProvisioner::resetCredentials() {
+    wm_.resetSettings();
+}
+
 void WifiProvisioner::logStatusChange() {
     const bool connected = (WiFi.status() == WL_CONNECTED);
     if (connected && !wasConnected_) {

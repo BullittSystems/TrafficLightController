@@ -21,7 +21,8 @@ Initial firmware for the ESP32-C3 traffic light controller.
 - **StepMode engine**: data-driven, non-blocking (`millis()`-based, rollover-safe)
   pattern engine backing the table modes; supports multi-lamp steps.
 - **Wi-Fi provisioning**: non-blocking WiFiManager captive portal
-  (`TrafficLight-Setup`); lamp sequencing runs regardless of network state.
+  (`TrafficLight-Setup`); lamp sequencing runs regardless of network state. Holding
+  the BOOT button ~5s clears saved credentials and reopens the portal.
 - **Web UI**: embedded page to select mode and edit per-mode settings.
 - **REST API**:
   - `/api/settings` (GET/POST) - full configuration.

@@ -48,7 +48,10 @@ Decoupled layers; lamp behavior never depends on the network.
 - `Settings` — persists `AppSettings` to NVS (Preferences).
 - `SettingsCodec` — pure JSON parse/validate/serialize (no web-server dep, unit-tested).
 - `WebInterface` — ESPAsyncWebServer on :80; thin handlers delegate to the codec.
-- `WifiProvisioner` — WiFiManager, non-blocking; AP portal `TrafficLight-Setup`.
+- `WifiProvisioner` — WiFiManager, non-blocking; AP portal `TrafficLight-Setup`;
+  `resetCredentials()` clears saved creds. `main` polls the BOOT button (GPIO9,
+  `RESET_BUTTON_GPIO`); holding it `WIFI_RESET_HOLD_MS` clears creds + restarts into
+  the portal (poll in `loop()`, not at boot — GPIO9 low at reset enters the bootloader).
 
 Boot flow (`main.cpp`): lamps LOW -> load settings -> `controller.apply()` (starts
 mode immediately) -> Wi-Fi in background -> web server once connected.

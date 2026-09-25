@@ -72,6 +72,14 @@ device IP; the web UI is at `http://<device-ip>/`.
 
 Lamp sequencing runs the whole time, even before Wi-Fi is configured.
 
+### Changing networks / resetting Wi-Fi
+
+To move the device to a different network, clear its saved credentials: with the
+firmware running, **hold the BOOT button for ~5 seconds**. All three lamps flash to
+acknowledge, then it restarts into the `TrafficLight-Setup` portal so you can pick a
+new network. (Hold it *while running*, not through reset — holding BOOT during reset
+just enters the ROM bootloader.)
+
 ## Web UI
 
 Browse to `http://<device-ip>/`. Pick a mode from the dropdown; the relevant

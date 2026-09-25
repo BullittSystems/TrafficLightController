@@ -40,6 +40,9 @@ class WifiProvisioner {
     // True when connected to an access point (STA).
     bool isConnected() const;
 
+    // Clear saved Wi-Fi credentials. The next boot has none, so provisioning opens.
+    void resetCredentials();
+
   private:
     void logStatusChange();
 
