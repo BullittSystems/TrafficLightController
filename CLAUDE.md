@@ -76,8 +76,9 @@ specific routes (`/api/state/...`, `/api/mode/...`) **before** generic ones
 
 ## Modes and API
 
-Modes (persisted): `api`, `solid`, `blink`, `sequence`, `random`, `off`
-(enum order in `config.h` is the persisted byte order; reordering shifts values).
+Modes (persisted): `api`, `solid`, `blink`, `sequence`, `random`, `chase`, `off`
+(enum order in `config.h` is the persisted byte order; keep `off` last, insert new
+modes before it, and reordering shifts saved values).
 
 - `/api/settings` (GET/POST JSON) — full config incl. mode.
 - `/api/mode/<name>` and `/api/mode/random/{single,multi}` (GET|POST) — persisted mode switch.

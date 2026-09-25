@@ -89,8 +89,9 @@ struct PhaseDurations {
 
 // Operating mode selected at runtime and persisted.
 // NOTE: the numeric values are what get persisted, so reordering changes what a
-// previously-saved mode reads back as. Keep Off last so it bounds the valid range.
-enum class Mode : uint8_t { Api, Solid, Blink, Sequence, Random, Off };
+// previously-saved mode reads back as. Keep Off last so it bounds the valid range;
+// insert new modes before it (and update the range guard in Settings::load).
+enum class Mode : uint8_t { Api, Solid, Blink, Sequence, Random, Chase, Off };
 
 // Default random-mode hold-time bounds (ms).
 static constexpr uint32_t DEFAULT_RANDOM_MIN_MS = 1000;
@@ -120,6 +121,13 @@ struct BlinkSettings {
     uint32_t intervalMs = DEFAULT_BLINK_MS;
 };
 
+// Chase mode: walk R -> R+Y -> Y -> Y+G -> G -> G+R and repeat, each step held for
+// intervalMs.
+static constexpr uint32_t DEFAULT_CHASE_MS = 250;
+struct ChaseSettings {
+    uint32_t intervalMs = DEFAULT_CHASE_MS;
+};
+
 // Complete persisted application settings.
 struct AppSettings {
     Mode mode = Mode::Sequence;
@@ -127,6 +135,7 @@ struct AppSettings {
     RandomSettings random;
     SolidSettings solid;
     BlinkSettings blink;
+    ChaseSettings chase;
 };
 
 // Transient API-mode state (not persisted). Set via /api/state while in Api mode;

@@ -58,6 +58,7 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
         <option value="blink">Blink</option>
         <option value="sequence">Sequence</option>
         <option value="random">Random</option>
+        <option value="chase">Chase</option>
         <option value="off">Off</option>
       </select>
     </label>
@@ -100,6 +101,10 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
       <label>Min <input type="number" name="minMs" min="100" max="600000" step="50" required></label>
       <label>Max <input type="number" name="maxMs" min="100" max="600000" step="50" required></label>
     </fieldset>
+    <fieldset id="chase">
+      <legend>Chase step (ms)</legend>
+      <label>Interval (ms) <input type="number" name="chaseMs" min="100" max="600000" step="50" required></label>
+    </fieldset>
     <button type="submit">Save</button>
   </form>
   <p id="status" class="muted">&nbsp;</p>
@@ -111,7 +116,8 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
     solid: document.getElementById('solid'),
     blink: document.getElementById('blink'),
     sequence: document.getElementById('seq'),
-    random: document.getElementById('rnd')
+    random: document.getElementById('rnd'),
+    chase: document.getElementById('chase')
   };
   function showFor(mode) {
     for (const key in fs) fs[key].hidden = key !== mode;
@@ -127,6 +133,7 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
     f.solidColor.value = s.solid.color;
     f.blinkColor.value = s.blink.color;
     f.blinkMs.value = s.blink.intervalMs;
+    f.chaseMs.value = s.chase.intervalMs;
     showFor(s.mode);
   }
   f.mode.addEventListener('change', () => showFor(f.mode.value));
@@ -140,7 +147,8 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
       sequence: { greenMs: +f.greenMs.value, yellowMs: +f.yellowMs.value, redMs: +f.redMs.value },
       random: { minMs: +f.minMs.value, maxMs: +f.maxMs.value, variant: f.randomVariant.value },
       solid: { color: f.solidColor.value },
-      blink: { color: f.blinkColor.value, intervalMs: +f.blinkMs.value }
+      blink: { color: f.blinkColor.value, intervalMs: +f.blinkMs.value },
+      chase: { intervalMs: +f.chaseMs.value }
     };
     const r = await fetch('/api/settings', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
@@ -226,7 +234,8 @@ void WebInterface::begin() {
     static const ModeRoute modeRoutes[] = {
         {"/api/mode/api", Mode::Api},       {"/api/mode/solid", Mode::Solid},
         {"/api/mode/blink", Mode::Blink},   {"/api/mode/sequence", Mode::Sequence},
-        {"/api/mode/random", Mode::Random}, {"/api/mode/off", Mode::Off},
+        {"/api/mode/random", Mode::Random}, {"/api/mode/chase", Mode::Chase},
+        {"/api/mode/off", Mode::Off},
     };
     for (const ModeRoute& r : modeRoutes) {
         server_.on(r.path, HTTP_GET | HTTP_POST, [this, r](AsyncWebServerRequest* request) {

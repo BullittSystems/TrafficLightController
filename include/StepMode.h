@@ -33,8 +33,8 @@ struct Step {
     uint32_t durationMs;  // 0 = hold this step indefinitely (no advance)
 };
 
-// Maximum steps in a pattern (Sequence uses 3, Blink 2, Solid/Off 1).
-static constexpr uint8_t MAX_STEPS = 4;
+// Maximum steps in a pattern (Chase uses 6, Sequence 3, Blink 2, Solid/Off 1).
+static constexpr uint8_t MAX_STEPS = 6;
 
 // Bit mask for a single lamp, for building Step tables.
 static constexpr uint8_t lampBit(Lamp lamp) {

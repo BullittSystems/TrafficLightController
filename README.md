@@ -22,8 +22,8 @@ but any driver meeting the pin contract works.
 ## Features
 
 - **Modes:** sequence (normal green→yellow→red with configurable timings), random
-  (single-lamp or multi-lamp, bounded random timing), solid, blink, off, and an
-  API-driven mode.
+  (single-lamp or multi-lamp, bounded random timing), chase (an overlapping
+  R→R+Y→Y→Y+G→G→G+R walk), solid, blink, off, and an API-driven mode.
 - **Web UI** for selecting the mode and editing its settings.
 - **REST API** for automation, including webhook-friendly one-URL routes.
 - **Wi-Fi provisioning** via a captive portal on first boot; no hardcoded creds.
@@ -129,8 +129,9 @@ curl -X POST http://<device-ip>/api/settings -H 'Content-Type: application/json'
 | `/api/mode/random/multi` | Random, multi-lamp subsets |
 | `/api/mode/solid` | Hold the saved solid color |
 | `/api/mode/blink` | Blink the saved blink color |
-| `/api/mode/off` | All lamps off |
+| `/api/mode/chase` | Overlapping color chase |
 | `/api/mode/api` | Hand control to the API (see below) |
+| `/api/mode/off` | All lamps off |
 
 ```sh
 curl http://<device-ip>/api/mode/random/multi

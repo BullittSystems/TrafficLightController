@@ -56,6 +56,15 @@ TEST(SettingsCodecTest, WriteSettingsShape) {
     EXPECT_STREQ(doc["random"]["variant"], "multi");
     EXPECT_STREQ(doc["blink"]["color"], "green");
     EXPECT_EQ(doc["blink"]["intervalMs"].as<uint32_t>(), 250u);
+    EXPECT_EQ(doc["chase"]["intervalMs"].as<uint32_t>(), s.chase.intervalMs);
+}
+
+TEST(SettingsCodecTest, PatchUpdatesChaseInterval) {
+    AppSettings s;
+    withObject(R"({"mode":"chase","chase":{"intervalMs":250}})",
+               [&](JsonObjectConst obj) { EXPECT_TRUE(applySettingsPatch(obj, s).ok); });
+    EXPECT_EQ(s.mode, Mode::Chase);
+    EXPECT_EQ(s.chase.intervalMs, 250u);
 }
 
 TEST(SettingsCodecTest, WriteStateInApiIncludesState) {

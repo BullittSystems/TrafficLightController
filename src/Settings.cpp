@@ -37,6 +37,7 @@ constexpr char KEY_RND_VAR[]   = "rnd_variant";
 constexpr char KEY_SOLID_CLR[] = "solid_color";
 constexpr char KEY_BLINK_CLR[] = "blink_color";
 constexpr char KEY_BLINK_MS[]  = "blink_ms";
+constexpr char KEY_CHASE_MS[]  = "chase_ms";
 
 // Coerce a persisted byte back to a valid Lamp, defaulting on anything unexpected.
 Lamp toLamp(uint8_t value, Lamp fallback) {
@@ -73,6 +74,7 @@ AppSettings Settings::load() {
     s.blink.color =
         toLamp(prefs.getUChar(KEY_BLINK_CLR, static_cast<uint8_t>(s.blink.color)), s.blink.color);
     s.blink.intervalMs = prefs.getULong(KEY_BLINK_MS, s.blink.intervalMs);
+    s.chase.intervalMs = prefs.getULong(KEY_CHASE_MS, s.chase.intervalMs);
     prefs.end();
 
     // Guard against a corrupt/out-of-range persisted mode value (Off is the last
@@ -96,5 +98,6 @@ void Settings::save(const AppSettings& settings) {
     prefs.putUChar(KEY_SOLID_CLR, static_cast<uint8_t>(settings.solid.color));
     prefs.putUChar(KEY_BLINK_CLR, static_cast<uint8_t>(settings.blink.color));
     prefs.putULong(KEY_BLINK_MS, settings.blink.intervalMs);
+    prefs.putULong(KEY_CHASE_MS, settings.chase.intervalMs);
     prefs.end();
 }

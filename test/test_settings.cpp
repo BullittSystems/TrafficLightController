@@ -28,6 +28,7 @@ TEST_F(SettingsTest, LoadsDefaultsOnVirginNvs) {
     EXPECT_EQ(s.solid.color, Lamp::Green);
     EXPECT_EQ(s.blink.color, Lamp::Red);
     EXPECT_EQ(s.blink.intervalMs, DEFAULT_BLINK_MS);
+    EXPECT_EQ(s.chase.intervalMs, DEFAULT_CHASE_MS);
 }
 
 TEST_F(SettingsTest, RoundTripsAllFields) {
@@ -42,6 +43,7 @@ TEST_F(SettingsTest, RoundTripsAllFields) {
     out.solid.color       = Lamp::Yellow;
     out.blink.color       = Lamp::Green;
     out.blink.intervalMs  = 250;
+    out.chase.intervalMs  = 175;
     settings.save(out);
 
     AppSettings in = settings.load();
@@ -55,6 +57,7 @@ TEST_F(SettingsTest, RoundTripsAllFields) {
     EXPECT_EQ(in.solid.color, Lamp::Yellow);
     EXPECT_EQ(in.blink.color, Lamp::Green);
     EXPECT_EQ(in.blink.intervalMs, 250u);
+    EXPECT_EQ(in.chase.intervalMs, 175u);
 }
 
 TEST_F(SettingsTest, ApiModePersists) {

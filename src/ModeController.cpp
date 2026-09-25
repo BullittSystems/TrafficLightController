@@ -131,6 +131,21 @@ void ModeController::loadStepTable() {
         }
         case Mode::Random:
             return;  // Random does not use the step engine
+        case Mode::Chase: {
+            // Walk R -> R+Y -> Y -> Y+G -> G -> G+R, overlapping into the next color.
+            const uint32_t iv = settings_.chase.intervalMs;
+            const uint8_t r   = lampBit(Lamp::Red);
+            const uint8_t y   = lampBit(Lamp::Yellow);
+            const uint8_t g   = lampBit(Lamp::Green);
+            steps[0]          = {r, iv};
+            steps[1]          = {static_cast<uint8_t>(r | y), iv};
+            steps[2]          = {y, iv};
+            steps[3]          = {static_cast<uint8_t>(y | g), iv};
+            steps[4]          = {g, iv};
+            steps[5]          = {static_cast<uint8_t>(g | r), iv};
+            count             = 6;
+            break;
+        }
         case Mode::Off:
             steps[0] = {0, 0};
             count    = 1;

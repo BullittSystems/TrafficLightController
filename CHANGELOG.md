@@ -16,8 +16,9 @@ Initial firmware for the ESP32-C3 traffic light controller.
   agnostic with configurable polarity (`LAMP_ACTIVE_HIGH`, active-high default) and
   boot-safe initialization (all lamps driven to OFF before anything else).
 - **Modes**: `sequence` (configurable green/yellow/red durations), `random`
-  (single lamp or multi-lamp subsets, bounded random hold times), `solid`,
-  `blink`, `off`, and `api`. All persisted to NVS and auto-resumed on boot.
+  (single lamp or multi-lamp subsets, bounded random hold times), `chase`
+  (overlapping R→R+Y→Y→Y+G→G→G+R walk, configurable step), `solid`, `blink`,
+  `api`, and `off`. All persisted to NVS and auto-resumed on boot.
 - **StepMode engine**: data-driven, non-blocking (`millis()`-based, rollover-safe)
   pattern engine backing the table modes; supports multi-lamp steps.
 - **Wi-Fi provisioning**: non-blocking WiFiManager captive portal

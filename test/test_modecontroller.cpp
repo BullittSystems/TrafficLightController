@@ -85,6 +85,39 @@ TEST_F(ModeControllerTest, BlinkToggles) {
     EXPECT_FALSE(redOn());
 }
 
+TEST_F(ModeControllerTest, ChaseWalksSixOverlappingSteps) {
+    AppSettings s      = base();
+    s.mode             = Mode::Chase;
+    s.chase.intervalMs = 100;
+    controller.apply(s);
+
+    auto expectLamps = [](bool r, bool y, bool g) {
+        EXPECT_EQ(redOn(), r);
+        EXPECT_EQ(yellowOn(), y);
+        EXPECT_EQ(greenOn(), g);
+    };
+
+    expectLamps(true, false, false);  // R
+    mock_advance_millis(100);
+    controller.tick();
+    expectLamps(true, true, false);  // R+Y
+    mock_advance_millis(100);
+    controller.tick();
+    expectLamps(false, true, false);  // Y
+    mock_advance_millis(100);
+    controller.tick();
+    expectLamps(false, true, true);  // Y+G
+    mock_advance_millis(100);
+    controller.tick();
+    expectLamps(false, false, true);  // G
+    mock_advance_millis(100);
+    controller.tick();
+    expectLamps(true, false, true);  // G+R
+    mock_advance_millis(100);
+    controller.tick();
+    expectLamps(true, false, false);  // wraps to R
+}
+
 TEST_F(ModeControllerTest, ParamEditAppliesImmediatelyWithoutModeChange) {
     AppSettings s = base();
     s.mode        = Mode::Solid;

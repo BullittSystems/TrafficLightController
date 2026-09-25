@@ -45,6 +45,8 @@ const char* modeName(Mode mode) {
             return "sequence";
         case Mode::Random:
             return "random";
+        case Mode::Chase:
+            return "chase";
         case Mode::Off:
             return "off";
     }
@@ -105,6 +107,8 @@ bool parseMode(JsonVariantConst v, Mode& out) {
         out = Mode::Sequence;
     } else if (v == "random") {
         out = Mode::Random;
+    } else if (v == "chase") {
+        out = Mode::Chase;
     } else if (v == "off") {
         out = Mode::Off;
     } else {
@@ -165,6 +169,8 @@ void writeSettings(JsonDocument& doc, const AppSettings& s) {
     JsonObject blink    = doc["blink"].to<JsonObject>();
     blink["color"]      = colorName(s.blink.color);
     blink["intervalMs"] = s.blink.intervalMs;
+    JsonObject chase    = doc["chase"].to<JsonObject>();
+    chase["intervalMs"] = s.chase.intervalMs;
 }
 
 void writeState(JsonDocument& doc, Mode mode, uint8_t litMask, bool inApiMode,
@@ -212,6 +218,9 @@ Result applySettingsPatch(JsonObjectConst obj, AppSettings& s) {
         return {false, "invalid blink color"};
     }
     s.blink.intervalMs = clampMs(blink["intervalMs"] | s.blink.intervalMs);
+
+    JsonVariantConst chase = obj["chase"];
+    s.chase.intervalMs     = clampMs(chase["intervalMs"] | s.chase.intervalMs);
 
     return {true, nullptr};
 }
