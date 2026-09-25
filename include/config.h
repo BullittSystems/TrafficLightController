@@ -79,6 +79,10 @@ static constexpr unsigned long WIFI_PORTAL_CONNECT_TIMEOUT_S = 10;
 static constexpr uint32_t WIFI_PORTAL_HOLD_MS = 5000;
 static constexpr uint32_t WIFI_RESET_HOLD_MS  = 15000;
 
+// Retry interval for binding the web server while port 80 is still held after a
+// portal session.
+static constexpr uint32_t WEB_BIND_RETRY_MS = 5000;
+
 // Serial monitor baud (matches platformio.ini monitor_speed).
 static constexpr unsigned long SERIAL_BAUD = 115200;
 

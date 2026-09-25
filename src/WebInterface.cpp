@@ -275,6 +275,14 @@ WebInterface::WebInterface(Settings& settings, ModeController& controller, WifiP
       wifi_(wifi) {}
 
 void WebInterface::begin() {
+    if (!routesRegistered_) {
+        registerRoutes();
+        routesRegistered_ = true;
+    }
+    server_.begin();  // no-op once listening; retries the bind otherwise
+}
+
+void WebInterface::registerRoutes() {
     server_.on("/", HTTP_GET, [](AsyncWebServerRequest* request) {
         // ESP32 flash is memory-mapped, so the PROGMEM literal is read directly.
         request->send(200, "text/html", INDEX_HTML);
@@ -375,8 +383,6 @@ void WebInterface::begin() {
     server_.addHandler(&settingsPostHandler_);
     statePostHandler_.setMethod(HTTP_POST);
     server_.addHandler(&statePostHandler_);
-
-    server_.begin();
 }
 
 void WebInterface::handleGetSettings(AsyncWebServerRequest* request) {

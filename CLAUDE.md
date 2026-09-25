@@ -78,7 +78,9 @@ Decoupled layers; lamp behavior never depends on the network.
   once the web server owns :80, hence the restart.
 
 Boot flow (`main.cpp`): lamps LOW -> load settings -> `controller.apply()` (starts
-mode immediately) -> Wi-Fi in background -> web server once connected.
+mode immediately) -> Wi-Fi in background -> web server once connected. The bind is
+retried every `WEB_BIND_RETRY_MS`: after a portal session the phone's connection to
+:80 sits in TCP TIME_WAIT (up to ~2 min) and lwIP refuses the port until it clears.
 
 ### Concurrency
 

@@ -39,15 +39,21 @@ class WebInterface {
   public:
     WebInterface(Settings& settings, ModeController& controller, WifiProvisioner& wifi);
 
-    // Register routes and start listening. Call once, after Wi-Fi has connected,
-    // so the port is free of the provisioning portal.
+    // Register routes (first call only) and start listening. Call after Wi-Fi has
+    // connected. Safe to call again if listening() is still false: after a portal
+    // session, port 80 can stay held by the phone's connection in TCP TIME_WAIT
+    // (up to ~2 min), and the bind fails until it clears.
     void begin();
+
+    // True once the server is bound and listening on port 80.
+    bool listening() const { return server_.state() == LISTEN; }
 
     // True once POST /api/wifi/reset was accepted. The reset and restart run from
     // loop(), after the response has gone out, not on the AsyncTCP task.
     bool wifiResetRequested() const { return wifiResetRequested_; }
 
   private:
+    void registerRoutes();
     void handleGetSettings(AsyncWebServerRequest* request);
     void handlePostSettings(AsyncWebServerRequest* request, JsonVariant& json);
 
@@ -81,4 +87,5 @@ class WebInterface {
     ModeController& controller_;
     WifiProvisioner& wifi_;
     std::atomic<bool> wifiResetRequested_{false};
+    bool routesRegistered_ = false;
 };

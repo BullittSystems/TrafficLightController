@@ -45,7 +45,8 @@ static ModeController controller(stepMode, randomMode);
 static Settings settings;
 static WifiProvisioner wifi;
 static WebInterface web(settings, controller, wifi);
-static bool webStarted = false;
+static bool webStarted       = false;
+static uint32_t webLastTryMs = 0;
 
 // Flash all lamps as acknowledgement, clear Wi-Fi credentials, and restart into the
 // provisioning portal. delay() is acceptable here since we are about to reboot, and
@@ -143,11 +144,18 @@ void loop() {
         resetWifiAndRestart();
     }
 
-    // Start the web server once, after Wi-Fi connects, so it does not contend
-    // with the provisioning portal for port 80.
-    if (!webStarted && wifi.isConnected()) {
+    // Start the web server after Wi-Fi connects, so it does not contend with the
+    // provisioning portal for port 80. The bind can fail for a while after a portal
+    // session (see WebInterface::begin), so retry until it is listening.
+    if (!webStarted && wifi.isConnected() &&
+        (webLastTryMs == 0 || millis() - webLastTryMs >= WEB_BIND_RETRY_MS)) {
+        webLastTryMs = millis();
         web.begin();
-        webStarted = true;
-        Serial.println("Web UI: started");
+        if (web.listening()) {
+            webStarted = true;
+            Serial.println("Web UI: started");
+        } else {
+            Serial.println("Web UI: port 80 busy, retrying");
+        }
     }
 }
