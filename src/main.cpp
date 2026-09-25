@@ -44,12 +44,28 @@ static RandomMode randomMode(lamps);
 static ModeController controller(stepMode, randomMode);
 static Settings settings;
 static WifiProvisioner wifi;
-static WebInterface web(settings, controller);
+static WebInterface web(settings, controller, wifi);
 static bool webStarted = false;
 
-// Clears Wi-Fi credentials and restarts (into the provisioning portal) when the
-// BOOT button is held for WIFI_RESET_HOLD_MS. Poll every loop; the timer resets
-// whenever the button is released.
+// Flash all lamps as acknowledgement, clear Wi-Fi credentials, and restart into the
+// provisioning portal. delay() is acceptable here since we are about to reboot, and
+// gives an API-triggered reset time to finish sending its response.
+static void resetWifiAndRestart() {
+    Serial.println("Wi-Fi reset: clearing saved credentials and restarting");
+    for (int i = 0; i < 6; i++) {
+        const bool on = (i % 2) == 0;
+        lamps.set(Lamp::Red, on);
+        lamps.set(Lamp::Yellow, on);
+        lamps.set(Lamp::Green, on);
+        delay(150);
+    }
+    wifi.resetCredentials();
+    delay(200);
+    ESP.restart();
+}
+
+// Resets Wi-Fi when the BOOT button is held for WIFI_RESET_HOLD_MS. Poll every
+// loop; the timer resets whenever the button is released.
 static void handleResetButton() {
     static uint32_t heldSinceMs = 0;
     const bool pressed          = digitalRead(RESET_BUTTON_GPIO) == LOW;
@@ -66,19 +82,7 @@ static void handleResetButton() {
         return;
     }
 
-    // Held long enough: flash all lamps as acknowledgement, clear creds, restart.
-    // delay() is acceptable here since we are about to reboot.
-    Serial.println("Wi-Fi reset: clearing saved credentials and restarting");
-    for (int i = 0; i < 6; i++) {
-        const bool on = (i % 2) == 0;
-        lamps.set(Lamp::Red, on);
-        lamps.set(Lamp::Yellow, on);
-        lamps.set(Lamp::Green, on);
-        delay(150);
-    }
-    wifi.resetCredentials();
-    delay(200);
-    ESP.restart();
+    resetWifiAndRestart();
 }
 
 void setup() {
@@ -116,6 +120,9 @@ void loop() {
     controller.tick();
     wifi.process();
     handleResetButton();
+    if (web.wifiResetRequested()) {
+        resetWifiAndRestart();
+    }
 
     // Start the web server once, after Wi-Fi connects, so it does not contend
     // with the provisioning portal for port 80.

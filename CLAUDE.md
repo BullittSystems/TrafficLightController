@@ -54,8 +54,17 @@ Decoupled layers; lamp behavior never depends on the network.
 - `Settings` — persists `AppSettings` to NVS (Preferences).
 - `SettingsCodec` — pure JSON parse/validate/serialize (no web-server dep, unit-tested).
 - `WebInterface` — ESPAsyncWebServer on :80; thin handlers delegate to the codec.
-- `WifiProvisioner` — WiFiManager, non-blocking; AP portal `TrafficLight-Setup`;
-  `resetCredentials()` clears saved creds. `main` polls the BOOT button (GPIO9,
+- `KnownNetworks` — up to 5 saved Wi-Fi networks in NVS namespace `tlwifi`, in
+  stable insertion order. **Never reordered or auto-evicted**: connecting writes
+  nothing; the list is only written when edited (add/replace/forget). A full list
+  returns `Full`. Fixed storage, no Wi-Fi deps, unit-tested.
+- `WifiProvisioner` — non-blocking state machine: async scan → connect to the
+  strongest known network in range → else WiFiManager portal `TrafficLight-Setup`.
+  Portal saves are **appended** to `KnownNetworks`; if the list is full, the network
+  becomes a RAM-only **session network** (used until reboot, also a rescan
+  candidate) that the user can persist via `keepSessionNetwork(replaceSsid)`. `WiFi.persistent
+  (false)`: the list is the only store (a pre-existing core-saved network is migrated
+  once, then the core slot is wiped). `resetCredentials()` clears the list. `main` polls the BOOT button (GPIO9,
   `RESET_BUTTON_GPIO`); holding it `WIFI_RESET_HOLD_MS` clears creds + restarts into
   the portal (poll in `loop()`, not at boot — GPIO9 low at reset enters the bootloader).
 

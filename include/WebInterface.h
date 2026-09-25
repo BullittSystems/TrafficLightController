@@ -26,19 +26,26 @@
 #include <AsyncJson.h>
 #include <ESPAsyncWebServer.h>
 
+#include <atomic>
+
 #include "ModeController.h"
 #include "Settings.h"
+#include "WifiProvisioner.h"
 
 // Serves the embedded settings page and JSON API on port 80: view and edit the
 // operating mode and its per-mode settings, persisting changes and applying them
-// to the running modes.
+// to the running modes. Also manages the saved Wi-Fi networks.
 class WebInterface {
   public:
-    WebInterface(Settings& settings, ModeController& controller);
+    WebInterface(Settings& settings, ModeController& controller, WifiProvisioner& wifi);
 
     // Register routes and start listening. Call once, after Wi-Fi has connected,
     // so the port is free of the provisioning portal.
     void begin();
+
+    // True once POST /api/wifi/reset was accepted. The reset and restart run from
+    // loop(), after the response has gone out, not on the AsyncTCP task.
+    bool wifiResetRequested() const { return wifiResetRequested_; }
 
   private:
     void handleGetSettings(AsyncWebServerRequest* request);
@@ -57,9 +64,21 @@ class WebInterface {
     // Log an incoming API request (method, path, client IP) to the serial console.
     void logRequest(AsyncWebServerRequest* request);
 
+    // GET /api/wifi, and the response body of the other /api/wifi routes.
+    void handleGetWifi(AsyncWebServerRequest* request);
+    void handlePostWifiAdd(AsyncWebServerRequest* request, JsonVariant& json);
+    void handlePostWifiForget(AsyncWebServerRequest* request, JsonVariant& json);
+    void handlePostWifiKeep(AsyncWebServerRequest* request, JsonVariant& json);
+    static void sendError(AsyncWebServerRequest* request, int code, const char* error);
+
     AsyncWebServer server_;
     AsyncCallbackJsonWebHandler settingsPostHandler_;
     AsyncCallbackJsonWebHandler statePostHandler_;
+    AsyncCallbackJsonWebHandler wifiAddHandler_;
+    AsyncCallbackJsonWebHandler wifiForgetHandler_;
+    AsyncCallbackJsonWebHandler wifiKeepHandler_;
     Settings& settings_;
     ModeController& controller_;
+    WifiProvisioner& wifi_;
+    std::atomic<bool> wifiResetRequested_{false};
 };

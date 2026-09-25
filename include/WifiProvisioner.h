@@ -23,32 +23,71 @@
  */
 #pragma once
 
-#include <WiFiManager.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 
-// Manages Wi-Fi provisioning via WiFiManager in non-blocking mode: connects with
-// saved credentials, or serves an AP captive portal for setup. Never blocks the
-// main loop, so lamp sequencing continues while provisioning is pending.
+#include "KnownNetworks.h"
+
+// Connects to the strongest in-range network from a saved list, falling back to a
+// WiFiManager captive portal when none are reachable. Networks provisioned through
+// the portal are appended to the list; if the list is full, the new network is kept
+// as a RAM-only "session" network until reboot (the user decides what to keep via
+// the API). Fully non-blocking (async scan, async connect), so lamp sequencing never
+// waits on Wi-Fi.
+//
+// The list and session network are guarded by a mutex: process() runs on the loop()
+// task while the list-editing methods are called from web handlers (AsyncTCP task).
 class WifiProvisioner {
   public:
-    // Start provisioning: connect with saved credentials, or open the config
-    // portal AP if none are stored / the connection fails.
+    enum class KeepResult : uint8_t { Kept, NoSession, Full, NotFound, Invalid };
+
+    WifiProvisioner();
+
+    // Load the saved list and start the first scan (or the portal if the list is empty).
     void begin();
 
-    // Drive the config portal and connection state machine. Call every loop().
+    // Drive the scan / connect / portal state machine. Call every loop().
     void process();
 
     // True when connected to an access point (STA).
     bool isConnected() const;
 
-    // Clear saved Wi-Fi credentials. The next boot has none, so provisioning opens.
+    // Forget every saved network and any session network. The next boot has none,
+    // so provisioning opens.
     void resetCredentials();
 
+    // Saved list, session network, and current connection, without passwords.
+    WifiSnapshot snapshot() const;
+
+    // Save a network (see KnownNetworks::add). Saving the session network's SSID
+    // persists it and ends the session entry. Takes effect on the next scan.
+    KnownNetworks::AddResult addNetwork(const char* ssid, const char* password);
+
+    // Remove a saved network. An active connection to it stays up until it drops.
+    bool forgetNetwork(const char* ssid);
+
+    // Persist the session network: appended if there is room (replaceSsid null),
+    // otherwise written over replaceSsid in place.
+    KeepResult keepSessionNetwork(const char* replaceSsid);
+
   private:
+    enum class State : uint8_t { Scanning, Connecting, Connected, Portal };
+
+    void enter(State state);
+    void startScanOrPortal();
+    void connectToBestScanResult(int16_t found);
+    const KnownNetwork* credentialsFor(const char* ssid) const;
     void startPortal();
+    void captureProvisionedNetwork();
     void logStatusChange();
 
-    WiFiManager wm_;
-    uint32_t staStartMs_ = 0;
-    bool portalStarted_  = false;
-    bool wasConnected_   = false;
+    SemaphoreHandle_t mutex_;
+    KnownNetworks networks_;
+    KnownNetwork session_    = {};
+    bool hasSession_         = false;
+    State state_             = State::Scanning;
+    uint32_t stateStartMs_   = 0;
+    uint32_t lostSinceMs_    = 0;
+    char connectingSsid_[33] = {};
+    bool wasConnected_       = false;
 };

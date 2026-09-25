@@ -65,6 +65,12 @@ static constexpr char AP_SSID[] = "TrafficLight-Setup";
 // and opening the provisioning portal. The attempt is non-blocking either way.
 static constexpr uint32_t WIFI_STA_CONNECT_TIMEOUT_MS = 15000;
 
+// Upper bound on the async scan for known networks before falling back to the portal.
+static constexpr uint32_t WIFI_SCAN_TIMEOUT_MS = 10000;
+
+// Bounds the (blocking) connect WiFiManager performs when the portal form is saved.
+static constexpr unsigned long WIFI_PORTAL_CONNECT_TIMEOUT_S = 10;
+
 // Hold the BOOT button (RESET_BUTTON_GPIO, set per board above) for this long while
 // the firmware is running to clear saved Wi-Fi credentials and restart into the
 // provisioning portal. Must be held after boot, not through reset (the BOOT pin low

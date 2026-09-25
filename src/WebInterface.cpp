@@ -26,6 +26,7 @@
 #include <ArduinoJson.h>
 
 #include "SettingsCodec.h"
+#include "WifiCodec.h"
 
 namespace {
 const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
@@ -162,7 +163,7 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
 </html>)HTML";
 }  // namespace
 
-WebInterface::WebInterface(Settings& settings, ModeController& controller)
+WebInterface::WebInterface(Settings& settings, ModeController& controller, WifiProvisioner& wifi)
     : server_(80),
       settingsPostHandler_("/api/settings",
                            [this](AsyncWebServerRequest* request, JsonVariant& json) {
@@ -172,8 +173,21 @@ WebInterface::WebInterface(Settings& settings, ModeController& controller)
                         [this](AsyncWebServerRequest* request, JsonVariant& json) {
                             handlePostState(request, json);
                         }),
+      wifiAddHandler_("/api/wifi/add",
+                      [this](AsyncWebServerRequest* request, JsonVariant& json) {
+                          handlePostWifiAdd(request, json);
+                      }),
+      wifiForgetHandler_("/api/wifi/forget",
+                         [this](AsyncWebServerRequest* request, JsonVariant& json) {
+                             handlePostWifiForget(request, json);
+                         }),
+      wifiKeepHandler_("/api/wifi/keep",
+                       [this](AsyncWebServerRequest* request, JsonVariant& json) {
+                           handlePostWifiKeep(request, json);
+                       }),
       settings_(settings),
-      controller_(controller) {}
+      controller_(controller),
+      wifi_(wifi) {}
 
 void WebInterface::begin() {
     server_.on("/", HTTP_GET, [](AsyncWebServerRequest* request) {
@@ -243,6 +257,24 @@ void WebInterface::begin() {
             applyModeChange(request, r.mode);
         });
     }
+
+    // Wi-Fi network management. The /api/wifi/... routes MUST precede the generic
+    // GET /api/wifi. Reset is POST-only so a browser prefetch can never trigger it.
+    wifiAddHandler_.setMethod(HTTP_POST);
+    server_.addHandler(&wifiAddHandler_);
+    wifiForgetHandler_.setMethod(HTTP_POST);
+    server_.addHandler(&wifiForgetHandler_);
+    wifiKeepHandler_.setMethod(HTTP_POST);
+    server_.addHandler(&wifiKeepHandler_);
+    server_.on("/api/wifi/reset", HTTP_POST, [this](AsyncWebServerRequest* request) {
+        logRequest(request);
+        request->send(202, "application/json", "{\"status\":\"resetting\"}");
+        wifiResetRequested_ = true;
+    });
+    server_.on("/api/wifi", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        logRequest(request);
+        handleGetWifi(request);
+    });
 
     // Generic reads, registered after the specific path routes (see note above).
     server_.on("/api/settings", HTTP_GET, [this](AsyncWebServerRequest* request) {
@@ -357,4 +389,92 @@ void WebInterface::applyRandomVariant(AsyncWebServerRequest* request, RandomVari
     settings_.save(app);
     controller_.apply(app);
     handleGetState(request);  // report the resulting state
+}
+
+void WebInterface::handleGetWifi(AsyncWebServerRequest* request) {
+    JsonDocument doc;
+    WifiCodec::writeNetworks(doc, wifi_.snapshot());
+
+    String body;
+    serializeJson(doc, body);
+    request->send(200, "application/json", body);
+}
+
+void WebInterface::handlePostWifiAdd(AsyncWebServerRequest* request, JsonVariant& json) {
+    logRequest(request);
+    const char* ssid     = nullptr;
+    const char* password = nullptr;
+    const WifiCodec::Result parse =
+        json.is<JsonObject>() ? WifiCodec::parseAdd(json.as<JsonObjectConst>(), ssid, password)
+                              : WifiCodec::Result{false, "expected JSON object"};
+    if (!parse.ok) {
+        sendError(request, 400, parse.error);
+        return;
+    }
+
+    switch (wifi_.addNetwork(ssid, password)) {
+        case KnownNetworks::AddResult::Added:
+        case KnownNetworks::AddResult::Updated:
+            handleGetWifi(request);
+            break;
+        case KnownNetworks::AddResult::Full:
+            sendError(request, 409, "network list full; forget one first");
+            break;
+        default:
+            sendError(request, 400, "invalid ssid or password");
+            break;
+    }
+}
+
+void WebInterface::handlePostWifiForget(AsyncWebServerRequest* request, JsonVariant& json) {
+    logRequest(request);
+    const char* ssid              = nullptr;
+    const WifiCodec::Result parse = json.is<JsonObject>()
+                                        ? WifiCodec::parseForget(json.as<JsonObjectConst>(), ssid)
+                                        : WifiCodec::Result{false, "expected JSON object"};
+    if (!parse.ok) {
+        sendError(request, 400, parse.error);
+        return;
+    }
+
+    if (!wifi_.forgetNetwork(ssid)) {
+        sendError(request, 404, "network not found");
+        return;
+    }
+    handleGetWifi(request);
+}
+
+void WebInterface::handlePostWifiKeep(AsyncWebServerRequest* request, JsonVariant& json) {
+    logRequest(request);
+    const char* replace           = nullptr;
+    const WifiCodec::Result parse = json.is<JsonObject>()
+                                        ? WifiCodec::parseKeep(json.as<JsonObjectConst>(), replace)
+                                        : WifiCodec::Result{false, "expected JSON object"};
+    if (!parse.ok) {
+        sendError(request, 400, parse.error);
+        return;
+    }
+
+    switch (wifi_.keepSessionNetwork(replace)) {
+        case WifiProvisioner::KeepResult::Kept:
+            handleGetWifi(request);
+            break;
+        case WifiProvisioner::KeepResult::NoSession:
+            sendError(request, 404, "no session network");
+            break;
+        case WifiProvisioner::KeepResult::Full:
+            sendError(request, 409, "network list full; specify replace");
+            break;
+        case WifiProvisioner::KeepResult::NotFound:
+            sendError(request, 404, "replace target not found");
+            break;
+        default:
+            sendError(request, 400, "invalid network");
+            break;
+    }
+}
+
+void WebInterface::sendError(AsyncWebServerRequest* request, int code, const char* error) {
+    String body = String("{\"error\":\"") + error + "\"}";
+    request->send(code, "application/json", body);
 }
