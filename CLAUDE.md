@@ -85,8 +85,8 @@ Decoupled layers; lamp behavior never depends on the network.
   which clash with ESPAsyncWebServer's, so never include `WiFiManager.h` from a header.
 - BOOT button (`RESET_BUTTON_GPIO`), two tiers, polled in `loop()` (not at boot: the
   pin low at reset enters the bootloader). Held past `WIFI_PORTAL_HOLD_MS` the lamps
-  go solid yellow and the modes pause; release restarts into the portal with the
-  list kept (`requestPortalOnBoot()`, an RTC_NOINIT magic, no flash write). Held to
+  go solid yellow and the modes pause (blinking from `WIFI_RESET_WARN_MS` as a
+  warning); release restarts into the portal with the list kept (`requestPortalOnBoot()`, an RTC_NOINIT magic, no flash write). Held to
   `WIFI_RESET_HOLD_MS` it forgets all and restarts. The portal can't open in place
   once the web server owns :80, hence the restart.
 

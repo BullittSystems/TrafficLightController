@@ -462,16 +462,23 @@ may choose not to do so.
 
 ------------------------------------------------------------------------
 
-## Open Hardware Decisions
+## Software Decisions (Resolved)
 
-The following should remain configurable or TBD in the software design:
+These were open when the hardware was designed. None of them change the
+electrical design; the firmware settled them as follows (details in the
+[README](../README.md)):
 
-1.  Final traffic-light timing and sequence.
-2.  Whether PWM effects will be implemented.
-3.  Whether Wi-Fi, Bluetooth, a web interface, Home Assistant
-    integration, or other ESP32 features will be used.
-4.  Behavior after boot or reset.
-5.  Behavior after loss and restoration of power.
-
-The electrical hardware does not require these software decisions to be
-finalized before assembly.
+1.  **Traffic-light timing and sequence:** configurable at runtime. The saved
+    mode (sequence, random, chase, solid, blink, or off) and its timings are
+    set from the web UI or REST API and persisted.
+2.  **PWM effects:** not implemented. Lamps are driven on/off only;
+    `LampController` keeps a seam for LEDC-based effects later.
+3.  **Wi-Fi, web interface, integrations:** Wi-Fi with a captive-portal setup
+    (`TrafficLight-Setup`) and up to 5 saved networks, a web UI, and a REST API.
+    Other systems (Home Assistant, webhooks) drive the light through the REST
+    API's overrides. Bluetooth is not used.
+4.  **Behavior after boot or reset:** all lamps are driven OFF first, then the
+    saved mode starts immediately; Wi-Fi comes up in the background and never
+    delays the lamps.
+5.  **Behavior after loss and restoration of power:** the same as a boot. The
+    saved mode resumes; temporary overrides are not persisted and are gone.

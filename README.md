@@ -131,6 +131,8 @@ you pick.
   - **~5 s**: the lamps turn solid yellow. Release to restart into the portal with
     the saved networks kept, e.g. to add one at a new site. The portal stays up for
     at least 5 minutes before it goes back to a saved network in range.
+  - **~12 s**: the yellow starts blinking fast. This is the warning: let go now to
+    keep your networks (you still get the portal).
   - **~15 s** (keep holding): all lamps flash, every saved network is forgotten,
     and the device restarts into the portal.
 

@@ -84,10 +84,14 @@ static constexpr unsigned long WIFI_PORTAL_CONNECT_TIMEOUT_S = 10;
 // Two-tier BOOT button (RESET_BUTTON_GPIO, set per board above), held while the
 // firmware is running. Past WIFI_PORTAL_HOLD_MS the lamps show solid yellow; releasing
 // then restarts into the provisioning portal with the saved networks kept. Holding
-// on to WIFI_RESET_HOLD_MS forgets every network instead. Must be held after boot,
-// not through reset (the BOOT pin low at reset enters the ROM bootloader).
+// on to WIFI_RESET_HOLD_MS forgets every network instead (yellow blinks first). Must be held after
+// boot, not through reset (the BOOT pin low at reset enters the ROM bootloader).
 static constexpr uint32_t WIFI_PORTAL_HOLD_MS = 5000;
 static constexpr uint32_t WIFI_RESET_HOLD_MS  = 15000;
+// From here until WIFI_RESET_HOLD_MS the yellow blinks (on/off every
+// WIFI_RESET_WARN_BLINK_MS) as a warning that the wipe is about to happen.
+static constexpr uint32_t WIFI_RESET_WARN_MS       = 12000;
+static constexpr uint32_t WIFI_RESET_WARN_BLINK_MS = 250;
 
 // Retry interval for binding the web server while port 80 is still held after a
 // portal session.

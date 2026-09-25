@@ -67,9 +67,9 @@ static void resetWifiAndRestart() {
 
 // Two-tier BOOT button, polled every loop (see WIFI_PORTAL_HOLD_MS). Once held past
 // the portal threshold the lamps show solid yellow; release then restarts into the
-// portal keeping the saved networks, and holding on to WIFI_RESET_HOLD_MS forgets
-// them all. Returns true while armed so loop() stops the modes from overwriting the
-// indicator.
+// portal keeping the saved networks. From WIFI_RESET_WARN_MS the yellow blinks as a
+// last chance to let go, and holding on to WIFI_RESET_HOLD_MS forgets them all.
+// Returns true while armed so loop() stops the modes from overwriting the indicator.
 static bool handleWifiButton() {
     static uint32_t heldSinceMs = 0;
     static bool armed           = false;
@@ -100,6 +100,10 @@ static bool handleWifiButton() {
         lamps.set(Lamp::Yellow, true);
         lamps.set(Lamp::Green, false);
         Serial.println("Wi-Fi button: release for portal, keep holding to forget all");
+    }
+    if (heldMs >= WIFI_RESET_WARN_MS) {
+        lamps.set(Lamp::Yellow,
+                  ((heldMs - WIFI_RESET_WARN_MS) / WIFI_RESET_WARN_BLINK_MS) % 2 == 0);
     }
     return armed;
 }
